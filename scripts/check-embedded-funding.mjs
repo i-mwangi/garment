@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import { KeyPair } from 'near-api-js';
 import { createNearReader, NearRpcError } from '../services/near/rpc.ts';
 import { readNearTreasuryIdentity } from '../services/server/near-treasury-config.ts';
 import { formatAmount, NEAR_DECIMALS } from '../services/near/amount.ts';
+import { implicitAccountId } from '../services/near/account-id.ts';
 
 const workspace = readNearTreasuryIdentity();
 if (workspace.networkId !== 'testnet') throw new Error('Funding check is restricted to testnet');
@@ -12,6 +14,8 @@ await reader.verifyNetwork();
 const rows = [{ kind: 'company', accountId: workspace.accountId }];
 for (const kind of ['treasury', 'gifts', 'executor']) {
   const saved = JSON.parse(readFileSync(resolve(directory, `${kind}.json`), 'utf8'));
+  const publicKey = KeyPair.fromString(saved.private_key).getPublicKey();
+  if (saved.public_key !== publicKey.toString() || saved.account_id !== implicitAccountId(publicKey.data)) throw new Error(`${kind} deployment credential identity mismatch`);
   rows.push({ kind, accountId: saved.account_id, publicKey: saved.public_key });
 }
 const result = [];
