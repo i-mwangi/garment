@@ -40,5 +40,5 @@ export async function POST(request:Request){
    accounts.push({kind,accountId,near,deposit,publicKey:saved.public_key,exists});
   }
   return Response.json({networkId:'testnet',parent,accounts},{headers:{'Cache-Control':'no-store'}});
- }catch(error){return Response.json({error:error instanceof Error?error.message:'Setup unavailable'},{status:409});}
+ }catch(error){const message=error instanceof Error?error.message:'Setup unavailable';return Response.json({error:message},{status:/(Authentication required|Workspace owner sign-in required)/.test(message)?401:409});}
 }
