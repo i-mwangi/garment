@@ -1,0 +1,67 @@
+{
+  "scope": "Ephemeral NEAR sandbox only; official-standard six-decimal fixture token, not real USDC.",
+  "startedAt": "2026-10-29T15:02:25.441Z",
+  "transactionsOnPublicNetworks": false,
+  "scenarios": [
+    {
+      "name": "quorum, restricted executor and exact finalized token settlement",
+      "passed": true,
+      "durationMs": 15770,
+      "gasBurnt": "7176308605227",
+      "receiptCount": 5
+    },
+    {
+      "name": "failed recipient transfer restores liquidity and retry pays exactly once",
+      "passed": true,
+      "durationMs": 13335,
+      "failedChildReceipts": 1,
+      "retryGasBurnt": "7189979784289"
+    },
+    {
+      "name": "gifts reject unauthorized claims, refund duplicate funding, and settle claim once",
+      "passed": true,
+      "durationMs": 15768,
+      "claimGasBurnt": "6331171168374"
+    },
+    {
+      "name": "expired gift refunds only its sender after the asynchronous token callback",
+      "passed": true,
+      "durationMs": 15147,
+      "refundGasBurnt": "6362184347642"
+    },
+    {
+      "name": "policy invalidation, paused recovery and two-person owner handover enforce authority",
+      "passed": true,
+      "durationMs": 22405,
+      "recoveryGasBurnt": "7223389420734"
+    },
+    {
+      "name": "maximum recipient and request capacity retain bounded execution gas",
+      "passed": true,
+      "durationMs": 614010,
+      "recipients": 500,
+      "requests": 1000,
+      "executionGasBurnt": "13213199965053",
+      "vaultStorageBytes": 643241
+    }
+  ],
+  "sandbox": {
+    "chainId": "test-chain-pOsMX",
+    "protocolVersion": 88,
+    "minimumProtocolVersion": 84
+  },
+  "finishedAt": "2026-10-29T15:14:38.033Z",
+  "passed": true,
+  "workflowUrl": "https://github.com/i-warukira/version-one/actions/runs/40897243702",
+  "commit": "c7168dc",
+  "approvedArtifacts": [
+    {
+      "name": "treasury-vault",
+      "sha256": "af822d5d518106853eaaf32c2a6c16a4f44f915d1f47e762dfe0ee41a1a5cd6c"
+    },
+    {
+      "name": "gift-escrow",
+      "sha256": "b12d5b1fe82c2f88b240e100b9f6634f284a171e2f7926b6f29cadf73343d6f2"
+    }
+  ]
+}
