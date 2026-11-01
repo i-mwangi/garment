@@ -14,7 +14,7 @@ export async function deployNativeContract(kind,{broadcast=false,requestId='init
  const deployment=readNearDeployment(),binding=deployment[kind];
  if(binding.networkId!=='testnet')throw new Error('This deployment command is restricted to NEAR testnet');
  const file=kind==='treasury'?'settlbox_near_treasury_vault.wasm':'settlbox_near_gift_escrow.wasm';
- const code=readFileSync(resolve('contracts/near/target/wasm32-unknown-unknown/release',file));
+ const code=readFileSync(resolve('contracts/near/approved-wasm',file));
  if(encodeBase58(createHash('sha256').update(code).digest())!==binding.codeHash)throw new Error('Built WASM differs from the approved deployment binding');
  const args=kind==='treasury'?{owner:binding.ownerId,executor:binding.executorId,token_id:binding.tokenId,policy:validateNativeVaultPolicy(JSON.parse(readFileSync(resolve(process.env.SETTLBOX_NEAR_VAULT_POLICY || '.data/near-vault-policy.json'),'utf8')))}:{token_id:binding.tokenId};
  const plan={networkId:binding.networkId,accountId:binding.accountId,codeHash:binding.codeHash,bytes:code.length,method:'new',args,gas:'200000000000000',requestId};
@@ -26,8 +26,8 @@ export async function deployNativeContract(kind,{broadcast=false,requestId='init
  const verify=()=>kind==='treasury'?verifiedVault(binding):verifiedGiftEscrow(binding);
  if(observed.code_hash===binding.codeHash){await verify();return {verified:true,alreadyDeployed:true,plan};}
  if(observed.code_hash!=='1'.repeat(32))throw new Error('Deployment target already has different code; no overwrite was attempted');
- const keyFile=process.env[kind==='treasury'?'SETTLBOX_NEAR_VAULT_DEPLOYER_KEY_FILE':'SETTLBOX_NEAR_GIFT_DEPLOYER_KEY_FILE'];
- if(!keyFile)throw new Error('Configure the contract account deployment key file separately from the restricted server executor');
+ const treasuryDirectory=dirname(resolve(process.env.SETTLBOX_NEAR_TREASURY_CONFIG || '.data/near-treasury.json'));
+ const keyFile=process.env[kind==='treasury'?'SETTLBOX_NEAR_VAULT_DEPLOYER_KEY_FILE':'SETTLBOX_NEAR_GIFT_DEPLOYER_KEY_FILE'] || resolve(treasuryDirectory,'embedded-deployment',`${kind}.json`);
  let credential,key;
  try{credential=JSON.parse(readFileSync(resolve(keyFile),'utf8'));key=KeyPair.fromString(credential.private_key);}catch{throw new Error('The local deployment credential could not be read');}
  if(credential.account_id!==binding.accountId)throw new Error('Deployment key must belong to the contract account itself');

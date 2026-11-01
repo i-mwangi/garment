@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getNearNetwork } from "@/services/near/network";
 import { createNearReader } from "@/services/near/rpc";
-import { parseAmount } from "@/services/near/amount";
+import { parseAmount, formatAmount, NEAR_DECIMALS } from "@/services/near/amount";
 import { assertNearAccountId } from "@/services/near/account-id";
 import { connectNearWallet, disconnectNearWallet, releaseNearWalletKey, signWalletMessage, sendNearCall, sendNativeNear, reconcilePendingSubmission, pendingSubmission, type NearCall } from "@/services/wallet/web3auth-near";
 
@@ -94,7 +94,7 @@ export function NearWalletProvider({ children }: { children: ReactNode }) {
     if (pendingSubmission(address)) { await reconcilePendingSubmission(address); if (pendingSubmission(address)) throw new Error("Wait for the previous transaction to settle"); }
     const balance = await reader.getNativeBalance(address);
     if (balance <= BigInt(baseUnits)) throw new Error("Fund your embedded wallet with NEAR for the transfer and gas first");
-    await authorize("Review native NEAR transfer", [network.name, `From: ${address}`, `To: ${recipient}`, `Amount: ${baseUnits} yoctoNEAR (24 decimal places)`, "This transfers NEAR and may activate an implicit deployment account. Its local deployment key controls that account."]);
+    await authorize("Review native NEAR transfer", [network.name, `From: ${address}`, `To: ${recipient}`, `Amount: ${formatAmount(BigInt(baseUnits), NEAR_DECIMALS)} NEAR`, `Exact amount: ${baseUnits} yoctoNEAR`, "This transfers NEAR and may activate an implicit deployment account. Its local deployment key controls that account."]);
     return sendNativeNear(recipient, baseUnits);
   }, [address,authorize,network.name,reader]);
   const sendUsdc = useCallback(async (recipient: string, amount: string, memo?: string) => {

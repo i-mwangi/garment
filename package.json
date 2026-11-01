@@ -17,6 +17,7 @@
     "verify:workspace": "node --env-file-if-exists=.env.local scripts/verify-workspace.mjs",
     "schedules:prepare": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/prepare-scheduled-payments.mjs",
     "contracts:compile": "node scripts/compile-gift-escrow.mjs",
+    "contracts:prepare": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/prepare-embedded-contracts.mjs",
     "contracts:deploy": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/deploy-gift-escrow.mjs",
     "verify:gifts": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-gifts.mjs",
     "seed:reimbursements": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/seed-reimbursements.mjs",
