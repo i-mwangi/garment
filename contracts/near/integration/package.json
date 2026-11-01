@@ -1,0 +1,1 @@
+{"name":"settlbox-native-sandbox-tests","private":true,"type":"module","scripts":{"test":"node --test --test-concurrency=1 sandbox.test.mjs"},"dependencies":{"near-workspaces":"5.0.0","settlbox":"file:../../.."}}

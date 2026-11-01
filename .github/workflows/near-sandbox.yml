@@ -1,0 +1,43 @@
+name: Native NEAR sandbox
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'contracts/near/**'
+      - '.github/workflows/near-sandbox.yml'
+permissions:
+  contents: read
+jobs:
+  sandbox:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      RUSTFLAGS: --cfg near
+      SANDBOX_ARTIFACT_URL: https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Linux-x86_64/2.14.0/near-sandbox.tar.gz
+      NEAR_WORKSPACES_NETWORK: sandbox
+      SETTLBOX_APPROVED_WASM_DIR: contracts/near/approved-wasm
+      NEAR_WORKSPACES_NO_LOGS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: contracts/near/integration/package-lock.json
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.93.0 --profile minimal --target wasm32-unknown-unknown
+      - name: Build approved native contracts
+        run: cargo +1.93.0 build --manifest-path contracts/near/Cargo.toml --workspace --locked --release --target wasm32-unknown-unknown --jobs 2
+      - name: Build isolated NEP-141 fixture
+        run: cargo +1.93.0 build --manifest-path contracts/near/integration-token/Cargo.toml --locked --release --target wasm32-unknown-unknown --target-dir contracts/near/target/integration-token --jobs 2
+      - name: Install isolated sandbox dependencies
+        run: npm ci --prefix contracts/near/integration --no-audit --no-fund
+      - name: Execute full asynchronous sandbox scenarios
+        run: npm test --prefix contracts/near/integration
+      - name: Upload public verification results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-near-sandbox-result
+          path: docs/NEAR-SANDBOX-RESULT.json
+          if-no-files-found: warn

@@ -1,0 +1,15 @@
+[package]
+name = "settlbox-near-treasury-vault"
+version = "0.1.0"
+edition = "2021"
+rust-version.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = { workspace = true }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }
