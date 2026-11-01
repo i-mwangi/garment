@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": [
+    "services/near/**/*.ts",
+    "services/wallet/web3auth-near.ts",
+    "services/server/near-wallet-proof.ts",
+    "services/server/near-treasury-config.ts",
+    "contexts/NearWalletProvider.tsx",
+    "contexts/NearNetworkProvider.tsx",
+    "components/Send/NearTransferForm.tsx",
+    "presentation/contexts/NearPaymentProvider.tsx"
+  ],
+  "exclude": ["node_modules"]
+}
