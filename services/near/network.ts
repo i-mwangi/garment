@@ -15,7 +15,7 @@ export function getNearNetwork(value = process.env.NEXT_PUBLIC_NEAR_NETWORK || "
     networkId: value,
     name: value === "testnet" ? "NEAR Testnet" : "NEAR",
     rpcUrl: process.env.NEXT_PUBLIC_NEAR_RPC_URL || `https://rpc.${value}.near.org`,
-    backupRpcUrl: process.env.NEXT_PUBLIC_NEAR_BACKUP_RPC_URL || undefined,
+    backupRpcUrl: process.env.NEXT_PUBLIC_NEAR_BACKUP_RPC_URL || (value === "testnet" ? "https://rpc.testnet.fastnear.com" : undefined),
     explorerUrl: value === "testnet" ? "https://testnet.nearblocks.io" : "https://nearblocks.io",
     usdcContractId: value === "testnet"
       ? "3e2210e1184b45b64c8a434c0a7e7b23cc04ea7eb7a6c3c32520d03d4afcb8af"
