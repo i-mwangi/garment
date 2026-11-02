@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   distDir: process.env.NODE_ENV === "development" ? ".next-dev" : ".next",
   output: "standalone",
+  experimental: { webpackBuildWorker: false },
   typescript: {ignoreBuildErrors: process.env.SETTLBOX_SERIAL_TYPECHECK === "1"},
   devIndicators: false,
   async headers() { return [{ source: "/oauth/:path*", headers: [{ key: "Content-Security-Policy", value: "frame-ancestors 'none'" }, { key: "X-Frame-Options", value: "DENY" }, { key: "Referrer-Policy", value: "no-referrer" }, { key: "Cache-Control", value: "no-store" }] }]; },
