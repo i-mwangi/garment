@@ -20,6 +20,7 @@ export interface AgentAction {
 }
 
 export interface AgentPlan {
+  planningUnavailableReason?: string;
   networkId?: "testnet" | "mainnet";
   vaultId?: string;
   cashPosition?: {
