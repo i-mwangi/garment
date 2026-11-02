@@ -30,8 +30,9 @@ test('base58 preserves leading zero bytes and rejects invalid alphabet',()=>{
   assert.throws(()=>decodeBase58('0OIl'));
 });
 const network={networkId:'testnet',name:'NEAR Testnet',rpcUrl:'https://rpc.testnet.near.org',usdcContractId:'token.testnet',usdcDecimals:6,explorerUrl:'https://testnet.nearblocks.io'};
-test('testnet has a separate public read fallback for rate-limited primary RPC',()=>{
-  assert.equal(getNearNetwork('testnet').backupRpcUrl,'https://rpc.testnet.fastnear.com');
+test('testnet uses FastNear for signing and keeps a public read fallback',()=>{
+  assert.equal(getNearNetwork('testnet').rpcUrl,'https://rpc.testnet.fastnear.com');
+  assert.equal(getNearNetwork('testnet').backupRpcUrl,'https://rpc.testnet.near.org');
 });
 test('rate-limited primary reads use a network-verified backup',async()=>{
   const calls=[];
