@@ -15,8 +15,9 @@ function separator(line: string): boolean {
   return cells(line).every(cell => /^:?-{3,}:?$/.test(cell));
 }
 
-export default function AgentAnswer({ text }: { text: string }) {
-  const lines = text.trim().split(/\r?\n/);
+export default function AgentAnswer({ text, suppressRepeated }: { text: string; suppressRepeated?: string }) {
+  const cleaned = suppressRepeated ? text.replaceAll(suppressRepeated, "").trim() : text.trim();
+  const lines = cleaned.split(/\r?\n/);
   const blocks: ReactNode[] = [];
   let index = 0;
   while (index < lines.length) {

@@ -1,7 +1,7 @@
 import type {AgentRun} from "@/types/agent";
 
 export default function DecisionRecord({run,expanded=false}:{run:AgentRun;expanded?:boolean}){
- if(run.planningUnavailableReason)return <p role="status" className="rounded-xl border border-primary-divider bg-background p-4 text-[14px]">{run.planningUnavailableReason} No payment has been prepared.</p>;
+ if(run.planningUnavailableReason)return null;
  const cash=run.cashPosition;
  return <details open={expanded||undefined} className="rounded-xl border border-primary-divider bg-background p-4 text-[14px]">
   <summary className="cursor-pointer font-semibold">Financial decision summary</summary>
