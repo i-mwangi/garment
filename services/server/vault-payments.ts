@@ -7,7 +7,7 @@ import { assertNearAccountId } from "../near/account-id.ts";
 import { parseAmount } from "../near/amount.ts";
 import { vaultQueueCall, vaultPaymentCall } from "../near/contract-actions.ts";
 import { verifyExecutorCall, verifyVaultSettlement } from "../near/vault-settlement.ts";
-import { createNearReader } from "../near/rpc.ts";
+import { createNearReader, type NearExecutionOutcome } from "../near/rpc.ts";
 import { readTreasuryVaultStatus } from "./treasury-vault.ts";
 import { openBusinessRecords } from "./business-records.ts";
 import { openAgentRuns } from "./agent-runs.ts";
@@ -26,6 +26,13 @@ function matches(payment:VaultPayment,state:NearVaultPayment) {
 }
 function scope(payment:VaultPayment,context:Awaited<ReturnType<typeof vaultPaymentContext>>) {
  if(payment.networkId!==context.binding.networkId || payment.vaultId!==context.binding.accountId || payment.codeHash!==context.binding.codeHash)throw new Error("Saved payment belongs to another native treasury deployment");
+}
+async function verifyPaidVaultOutcome(context:Awaited<ReturnType<typeof vaultPaymentContext>>,payment:VaultPayment,hash:string,outcome:NearExecutionOutcome) {
+ const call=vaultPaymentCall(context.binding.accountId,payment.id,"execute");
+ verifyVaultSettlement(outcome,call,payment,{hash,executorId:context.binding.executorId,tokenId:context.binding.tokenId});
+ const final=await verifiedVault(context.binding),observed=await final.payment(payment.id);
+ if(!observed || observed.status!=="paid")throw new Error("Native payment completion callback is not verified");
+ matches(payment,observed);
 }
 export async function queueVaultPayment(companyId:string,principal:string,runId:string,recordId:string,active:()=>boolean=()=>true) {
  const context=await vaultPaymentContext(companyId),journal=openVaultPayments(),records=openBusinessRecords(),runs=openAgentRuns();
@@ -54,7 +61,18 @@ export async function reconcileVaultPayment(companyId:string,recordId:string) {
  const context=await vaultPaymentContext(companyId),journal=openVaultPayments();
  try {
   let payment=journal.get(companyId,recordId);if(!payment)throw new Error("Native treasury payment not found");scope(payment,context);
-  if(payment.status==="paid")return payment;
+  if(payment.status==="paid") {
+   const records=openBusinessRecords();
+   try {
+    if(records.hasVerifiedPayout(companyId,recordId))return payment;
+    const hash=payment.transactionHash;
+    if(!hash || hash!==payment.executeTransactionHash)throw new Error("Paid vault payment has no matching execution proof");
+    const outcome=await context.reader.getReceipt(hash,context.binding.executorId);
+    await verifyPaidVaultOutcome(context,payment,hash,outcome);
+    records.recordVerifiedVaultPayout(companyId,recordId,payment.id,hash,context.binding.tokenId);
+    return payment;
+   }finally{records.close();}
+  }
   for(const stage of ["queue","execute"] as const) {
    const field=stage==="queue"?"queueTransactionHash":"executeTransactionHash";
    const jobId=nativeSubmissionId(context.binding,payment.id,stage),job=nativeSubmissionStatus(jobId);
@@ -70,9 +88,7 @@ export async function reconcileVaultPayment(companyId:string,recordId:string) {
    verifyExecutorCall(outcome,call,{hash,executorId:context.binding.executorId});
    resolveNativeSubmission(jobId,hash);
    if(stage==="execute") {
-    verifyVaultSettlement(outcome,call,payment,{hash,executorId:context.binding.executorId,tokenId:context.binding.tokenId});
-    const final=await verifiedVault(context.binding),observed=await final.payment(payment.id);
-    if(!observed || observed.status!=="paid")throw new Error("Native payment completion callback is not verified");matches(payment,observed);
+    await verifyPaidVaultOutcome(context,payment,hash,outcome);
     const records=openBusinessRecords();try{records.recordVerifiedVaultPayout(companyId,recordId,payment.id,hash,context.binding.tokenId);}finally{records.close();}
     return journal.patch(payment,{transactionHash:hash,status:"paid"},`Native USDC settlement verified: ${hash}`);
    }

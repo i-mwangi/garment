@@ -245,6 +245,10 @@ export class BusinessRecordRepository {
     return this.database.prepare("SELECT company_id AS companyId,record_id AS recordId,transaction_hash AS transactionHash,amount_units AS amountUnits,network_id AS networkId,token_contract_id AS tokenContractId,recorded_at AS recordedAt FROM business_payout_events WHERE company_id=? ORDER BY recorded_at DESC,record_id DESC LIMIT 500").all(companyId) as unknown as VerifiedPayoutEvent[];
   }
 
+  hasVerifiedPayout(companyId: string, recordId: string): boolean {
+    return !!this.database.prepare("SELECT 1 FROM business_payout_events WHERE company_id=? AND record_id=?").get(companyId, recordId);
+  }
+
   close() { this.database.close(); }
 
   cancel(companyId: string, id: string) {

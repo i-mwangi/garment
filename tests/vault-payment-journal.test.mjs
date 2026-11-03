@@ -69,6 +69,7 @@ test('verified vault payout evidence is exact, private, and idempotent',()=>fixt
   const record=create(records);
   const saved=journal.reserve(payment(record));
   journal.patch(saved,{executeTransactionHash:txHash,status:'execution_pending'},'Execution submitted');
+  assert.equal(records.hasVerifiedPayout('company',record.id),false);
   assert.throws(()=>records.recordVerifiedVaultPayout('company',record.id,saved.id,secondHash,'usdc.testnet'),/journal/);
   assert.equal(records.get('company',record.id).status,'awaiting_approval');
   const paid=records.recordVerifiedVaultPayout('company',record.id,saved.id,txHash,'usdc.testnet');
@@ -77,6 +78,8 @@ test('verified vault payout evidence is exact, private, and idempotent',()=>fixt
   const evidence=records.listVerifiedPayouts('company')[0];
   assert.equal(evidence.amountUnits,'1000');
   assert.equal(evidence.transactionHash,txHash);
+  assert.equal(records.hasVerifiedPayout('company',record.id),true);
+  assert.equal(records.hasVerifiedPayout('another',record.id),false);
   assert.deepEqual(records.listVerifiedPayouts('another'),[]);
   assert.ok(!JSON.stringify(evidence).includes(recipient));
   assert.ok(!JSON.stringify(evidence).includes(record.counterparty));
