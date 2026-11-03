@@ -21,5 +21,6 @@ export default function AgentAudit({turns,proposals}:{turns:AgentChatTurn[];prop
   })}</div>
   {!turns.length&&<p className="mt-3">No saved conversations yet.</p>}
   <a href="/transactions" className="inline-block mt-4 text-primary-blue underline">Open payment records and settlements</a>
+  <a href="/ledger" className="inline-block ml-4 mt-4 text-primary-blue underline">Open public business ledger</a>
  </details>;
 }
