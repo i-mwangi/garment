@@ -3,10 +3,21 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parseAmount } from "../near/amount.ts";
-import { assertNearAccountId } from "../near/account-id.ts";
+import { assertNearAccountId, isNearTransactionHash } from "../near/account-id.ts";
 import type { BusinessRecord, BusinessRecordInput, BusinessRecordStatus } from "../../types/business";
 import type { PaymentSchedule, ScheduleStatus } from "../../types/recurring-payment";
 import { nextPaymentDate, scheduledRecordId, validateCalendarDate, validatePaymentSchedule } from "./payment-schedules.ts";
+
+export interface VerifiedSaleEvent {
+  companyId: string;
+  invoiceId: string;
+  transactionHash: string;
+  amountUnits: string;
+  networkId: string;
+  tokenContractId: string;
+  settledAt: string;
+  recordedAt: string;
+}
 
 export function validateBusinessRecord(value: unknown): BusinessRecordInput {
   if (typeof value !== "object" || value === null) throw new Error("Business record is required");
@@ -36,6 +47,12 @@ export class BusinessRecordRepository {
       CREATE INDEX IF NOT EXISTS due_payment_schedules ON payment_schedules(company_id,status,next_date);
       CREATE INDEX IF NOT EXISTS business_record_listing ON business_records(company_id,kind);`);
     this.database.exec("CREATE TABLE IF NOT EXISTS business_payment_routes(company_id TEXT NOT NULL,record_id TEXT NOT NULL,route TEXT NOT NULL,PRIMARY KEY(company_id,record_id))");
+    this.database.exec(`CREATE TABLE IF NOT EXISTS business_sale_events(
+      company_id TEXT NOT NULL, invoice_id TEXT NOT NULL, transaction_hash TEXT NOT NULL UNIQUE,
+      amount_units TEXT NOT NULL, network_id TEXT NOT NULL, token_contract_id TEXT NOT NULL,
+      settled_at TEXT NOT NULL, recorded_at TEXT NOT NULL,
+      PRIMARY KEY(company_id,invoice_id));
+      CREATE INDEX IF NOT EXISTS business_sale_event_listing ON business_sale_events(company_id,settled_at);`);
   }
 
   create(companyId: string, input: unknown, requestId?: string): BusinessRecord {
@@ -161,6 +178,31 @@ export class BusinessRecordRepository {
     const result = this.database.prepare("UPDATE business_records SET record=? WHERE id=? AND company_id=? AND record=?").run(JSON.stringify(next), id, companyId, JSON.stringify(record));
     if (Number(result.changes) !== 1) throw new Error("Record changed; refresh before retrying");
     return next;
+  }
+
+  settleVerifiedInvoice(companyId: string, code: string, hash: string): BusinessRecord {
+    if (!isNearTransactionHash(hash)) throw new Error("A native NEAR transaction hash is required");
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const record = this.get(companyId, code);
+      if (!record || record.kind !== "invoice" || record.paymentLinkCode !== code || !["issued", "paid"].includes(record.status)) throw new Error("Invoice is not eligible for collection");
+      const row = this.database.prepare("SELECT p.created_at AS settled_at,l.record AS link FROM business_link_payments p JOIN business_payment_links l ON l.code=p.code WHERE p.code=? AND p.hash=?").get(code, hash);
+      if (!row) throw new Error("Verified payment link settlement is missing");
+      const link = JSON.parse(String(row.link)) as { amount?: string; paymentWalletAddress?: string; acceptedTokens?: { symbol: string; address: string; decimals: number }[]; acceptedChains?: { networkId: string }[] };
+      if (link.amount !== record.amount || link.paymentWalletAddress !== record.recipient || link.acceptedTokens?.length !== 1 || link.acceptedTokens[0].symbol !== "USDC" || link.acceptedTokens[0].decimals !== 6 || !link.acceptedTokens[0].address || link.acceptedChains?.length !== 1 || !["testnet", "mainnet"].includes(link.acceptedChains[0].networkId)) throw new Error("Invoice and verified payment link terms differ");
+      if (record.status === "paid" && record.transactionHash !== hash) throw new Error("Invoice settlement proof differs from its saved transaction");
+      const paid = record.status === "paid" ? record : this.transition(companyId, code, "paid", ["issued"], { transactionHash: hash });
+      const event: VerifiedSaleEvent = { companyId, invoiceId: code, transactionHash: hash, amountUnits: parseAmount(record.amount).toString(), networkId: link.acceptedChains[0].networkId, tokenContractId: link.acceptedTokens[0].address, settledAt: String(row.settled_at), recordedAt: new Date().toISOString() };
+      this.database.prepare("INSERT OR IGNORE INTO business_sale_events VALUES(?,?,?,?,?,?,?,?)").run(event.companyId, event.invoiceId, event.transactionHash, event.amountUnits, event.networkId, event.tokenContractId, event.settledAt, event.recordedAt);
+      const saved = this.database.prepare("SELECT transaction_hash,amount_units,network_id,token_contract_id FROM business_sale_events WHERE company_id=? AND invoice_id=?").get(companyId, code);
+      if (!saved || saved.transaction_hash !== event.transactionHash || saved.amount_units !== event.amountUnits || saved.network_id !== event.networkId || saved.token_contract_id !== event.tokenContractId) throw new Error("Sale evidence conflicts with the verified settlement");
+      this.database.exec("COMMIT");
+      return paid;
+    } catch (error) { this.database.exec("ROLLBACK"); throw error; }
+  }
+
+  listVerifiedSales(companyId: string): VerifiedSaleEvent[] {
+    return this.database.prepare("SELECT company_id AS companyId,invoice_id AS invoiceId,transaction_hash AS transactionHash,amount_units AS amountUnits,network_id AS networkId,token_contract_id AS tokenContractId,settled_at AS settledAt,recorded_at AS recordedAt FROM business_sale_events WHERE company_id=? ORDER BY settled_at DESC,invoice_id DESC LIMIT 500").all(companyId) as unknown as VerifiedSaleEvent[];
   }
 
   close() { this.database.close(); }

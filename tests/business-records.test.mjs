@@ -140,10 +140,36 @@ test("a verified link immediately settles only its matching issued invoice", () 
     const paid = reconcileInvoiceCollection("company", link.code, records, links);
     assert.equal(paid.status, "paid");
     assert.equal(paid.transactionHash, hash);
+    const sale = records.listVerifiedSales("company")[0];
+    assert.equal(sale.invoiceId, invoice.id);
+    assert.equal(sale.transactionHash, hash);
+    assert.equal(sale.amountUnits, "1000");
+    assert.deepEqual(records.listVerifiedSales("another"), []);
+    assert.ok(!JSON.stringify(sale).includes(details.counterparty));
+    assert.ok(!JSON.stringify(sale).includes(details.recipient));
     assert.deepEqual(reconcileInvoiceCollection("company", link.code, records, links), paid);
+    assert.deepEqual(records.listVerifiedSales("company"), [sale]);
     const independent = links.create({ ...details, paymentWalletAddress: details.recipient });
     links.record(independent.code, encodeBase58(new Uint8Array(32).fill(15)), details.recipient, details.amount);
     assert.equal(reconcileInvoiceCollection("company", independent.code, records, links), undefined);
+  } finally { links.close(); records.close(); rmSync(directory, { recursive: true }); }
+});
+
+test("sale evidence requires an exact invoice and verified link match", () => {
+  const directory = mkdtempSync(join(tmpdir(), "settlbox-sale-evidence-"));
+  const path = join(directory, "business.sqlite");
+  const records = new BusinessRecordRepository(path);
+  const links = new PaymentLinkRepository(path);
+  try {
+    const invoice = records.create("company", details);
+    const link = links.create({ ...details, amount: "0.002", paymentWalletAddress: details.recipient }, invoice.id);
+    records.transition("company", invoice.id, "issued", ["draft"], { paymentLinkCode: link.code });
+    const hash = encodeBase58(new Uint8Array(32).fill(16));
+    links.record(link.code, hash, details.recipient, "0.002");
+    assert.throws(() => reconcileInvoiceCollection("company", link.code, records, links), /terms differ/);
+    assert.equal(records.get("company", invoice.id).status, "issued");
+    assert.deepEqual(records.listVerifiedSales("company"), []);
+    assert.throws(() => records.settleVerifiedInvoice("company", invoice.id, encodeBase58(new Uint8Array(32).fill(17))), /missing/);
   } finally { links.close(); records.close(); rmSync(directory, { recursive: true }); }
 });
 
