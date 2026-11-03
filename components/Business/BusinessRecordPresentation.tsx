@@ -77,7 +77,7 @@ export function BusinessRecordPresentation({
       {record.kind === "bill" && record.supplierQuote && <section aria-label="Supplier quote" className="rounded-2xl border border-primary-divider bg-background p-5 text-sm">
         <h3 className="font-semibold">Supplier quote</h3>
         <dl className="mt-3 grid gap-3 sm:grid-cols-3"><div><dt className="text-text-secondary">Reference</dt><dd className="break-words">{record.supplierQuote.reference}</dd></div><div><dt className="text-text-secondary">Quoted amount</dt><dd className="num">{record.supplierQuote.amount} USDC</dd></div><div><dt className="text-text-secondary">Received</dt><dd>{record.supplierQuote.receivedDate}</dd></div></dl>
-        <p className="mt-3 text-text-secondary">Submitted quote details. Settlbox has not independently verified the supplier or quote.</p>
+        <p className="mt-3 text-text-secondary">{record.supplierQuoteApproval ? `Owner approved these bill terms on ${new Date(record.supplierQuoteApproval.approvedAt).toLocaleString()}. Supplier identity and quote authenticity remain unverified.` : "Submitted quote details. Owner approval is required before this bill can enter the vault payment workflow; Settlbox has not independently verified the supplier or quote."}</p>
       </section>}
       <h3 className="text-xl font-semibold">Summary</h3>
       <div className="overflow-hidden rounded-2xl border border-primary-divider">

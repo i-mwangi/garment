@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parseAmount } from "../near/amount.ts";
@@ -50,6 +50,11 @@ export function validateBusinessRecord(value: unknown): BusinessRecordInput {
     supplierQuote = { reference: quote.reference.trim(), amount: quote.amount, receivedDate: quote.receivedDate };
   }
   return { kind: input.kind, title: String(input.title).trim(), counterparty: String(input.counterparty).trim(), description: String(input.description), dueDate: String(input.dueDate), amount: String(input.amount), recipient: input.recipient as BusinessRecordInput["recipient"], ...(input.receiptUrls === undefined ? {} : { receiptUrls: input.receiptUrls as string[] }), ...(supplierQuote === undefined ? {} : { supplierQuote }) };
+}
+
+export function supplierQuoteFingerprint(record: BusinessRecord): string {
+  if (record.kind !== "bill" || !record.supplierQuote) throw new Error("A saved bill with supplier quote is required");
+  return createHash("sha256").update(JSON.stringify(validateBusinessRecord(record))).digest("hex");
 }
 
 export class BusinessRecordRepository {
@@ -185,10 +190,27 @@ export class BusinessRecordRepository {
     const details = validateBusinessRecord(input);
     const record = this.get(companyId, id);
     if (!record || record.status !== "draft" || record.kind !== details.kind) throw new Error("Only draft records can be edited");
-    const next = { ...record, ...details, updatedAt: new Date().toISOString() };
+    const sameTerms = JSON.stringify(validateBusinessRecord(record)) === JSON.stringify(details);
+    const next = { ...record, ...details, supplierQuoteApproval: sameTerms ? record.supplierQuoteApproval : undefined, updatedAt: new Date().toISOString() };
     const result = this.database.prepare("UPDATE business_records SET record=? WHERE id=? AND company_id=? AND record=?").run(JSON.stringify(next), id, companyId, JSON.stringify(record));
     if (Number(result.changes) !== 1) throw new Error("Record changed; refresh before editing");
     return next;
+  }
+
+  approveSupplierQuote(companyId: string, id: string, actor: string): BusinessRecord {
+    if (!actor || actor.length > 120) throw new Error("A company owner is required");
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const record = this.get(companyId, id);
+      if (!record || record.kind !== "bill" || record.status !== "draft" || !record.supplierQuote) throw new Error("Only a draft bill with supplier quote can be approved");
+      const fingerprint = supplierQuoteFingerprint(record);
+      if (record.supplierQuoteApproval?.fingerprint === fingerprint) { this.database.exec("COMMIT"); return record; }
+      const next: BusinessRecord = { ...record, supplierQuoteApproval: { approvedBy: actor, approvedAt: new Date().toISOString(), fingerprint }, updatedAt: new Date().toISOString() };
+      const result = this.database.prepare("UPDATE business_records SET record=? WHERE id=? AND company_id=? AND record=?").run(JSON.stringify(next), id, companyId, JSON.stringify(record));
+      if (Number(result.changes) !== 1) throw new Error("Bill changed before quote approval");
+      this.database.exec("COMMIT");
+      return next;
+    } catch (error) { this.database.exec("ROLLBACK"); throw error; }
   }
 
   transition(companyId: string, id: string, status: BusinessRecordStatus, expected: readonly BusinessRecordStatus[], extras: { paymentLinkCode?: string; transactionHash?: string } = {}): BusinessRecord {

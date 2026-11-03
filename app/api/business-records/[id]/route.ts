@@ -25,6 +25,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (typeof body !== "object" || body === null || !("action" in body)) throw new Error("An action is required");
     let record = repository.get(config.companyId, id);
     if (!record) return Response.json({ error: "Business record not found" }, { status: 404 });
+    if (body.action === "approveQuote") {
+      if (principal.role !== "OWNER") return Response.json({ error: "Company owner approval is required" }, { status: 403 });
+      return Response.json(repository.approveSupplierQuote(config.companyId, id, principal.id));
+    }
     if (body.action === "edit" && "data" in body) {
       if (record.kind === "invoice" && typeof body.data === "object" && body.data !== null && "recipient" in body.data && body.data.recipient !== config.accountId) throw new Error("Invoices must collect into the company treasury wallet");
       return Response.json(repository.updateDraft(config.companyId, id, body.data));

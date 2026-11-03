@@ -16,6 +16,7 @@ export interface BusinessRecordInput {
 }
 
 export interface BusinessRecord extends BusinessRecordInput {
+  supplierQuoteApproval?: { approvedBy: string; approvedAt: string; fingerprint: string };
   scheduleId?: string;
   id: string;
   companyId: string;

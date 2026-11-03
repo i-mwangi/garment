@@ -158,7 +158,7 @@ export function BusinessWorkspace({ kind, initialCreate = false, recordId, initi
             setIsSaving(false);
         }
     }
-    function action(record: BusinessRecord, name: "issue" | "pay" | "refresh" | "cancel") {
+    function action(record: BusinessRecord, name: "issue" | "pay" | "refresh" | "cancel" | "approveQuote") {
         mutation.mutate({
             path: `/api/business-records/${record.id}`,
             method: "PATCH",
@@ -377,12 +377,13 @@ export function BusinessWorkspace({ kind, initialCreate = false, recordId, initi
                     }}>
                                 Edit
                               </button>
-                              <button disabled={mutation.isPending} onClick={() => action(record, kind === "invoice" ? "issue" : "pay")}>
+                              <button disabled={mutation.isPending || (kind === "bill" && !!record.supplierQuote && !record.supplierQuoteApproval)} onClick={() => action(record, kind === "invoice" ? "issue" : "pay")}>
                                 {kind === "invoice"
                         ? "Issue invoice"
                         : "Submit payment"}
                               </button>
                             </>)}
+                          {user?.role === "OWNER" && kind === "bill" && selected?.id === record.id && record.status === "draft" && record.supplierQuote && !record.supplierQuoteApproval && <button disabled={mutation.isPending} onClick={() => action(record, "approveQuote")}>Approve supplier quote</button>}
                           {canManage &&
                     kind === "invoice" &&
                     record.status === "processing" && (<button disabled={mutation.isPending} onClick={() => action(record, "issue")}>

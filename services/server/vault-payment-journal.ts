@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
 import type { BusinessRecord } from "../../types/business";
 import { parseAmount } from "../near/amount.ts";
+import { supplierQuoteFingerprint } from "./business-records.ts";
 
 export interface VaultPayment {
   id: string; companyId: string; recordId: string; runId: string; recipient: string; amount: string; networkId: "testnet" | "mainnet"; vaultId: string; codeHash: string;
@@ -40,6 +41,7 @@ export class VaultPaymentJournal {
       const row = this.db.prepare("SELECT record FROM business_records WHERE company_id=? AND id=?").get(payment.companyId, payment.recordId);
       const record: BusinessRecord | undefined = row ? JSON.parse(String(row.record)) : undefined;
       if (!record || record.status !== "draft" || record.kind === "invoice" || record.recipient !== payment.recipient || record.amount !== payment.amount) throw new Error("Saved obligation changed or already has a payment workflow");
+      if (record.kind === "bill" && record.supplierQuote && record.supplierQuoteApproval?.fingerprint !== supplierQuoteFingerprint(record)) throw new Error("The supplier quote needs owner approval for these exact bill terms");
       const route = this.db.prepare("SELECT route FROM business_payment_routes WHERE company_id=? AND record_id=?").get(payment.companyId, payment.recordId);
       if (route && route.route !== "vault") throw new Error("Obligation is assigned to another payment route");
       this.db.prepare("INSERT OR IGNORE INTO business_payment_routes VALUES(?,?,'vault')").run(payment.companyId, payment.recordId);

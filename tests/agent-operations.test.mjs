@@ -57,6 +57,8 @@ test('action catalog rejects arbitrary paths, invalid money, unsupported chains 
   assert.throws(()=>validateAgentOperation({tool:'vault.authorize',arguments:{action:'setPolicy',address:'employee.testnet'}}));
   assert.throws(()=>validateAgentOperation({tool:'vault.authorize',arguments:{action:'allow_recipient',address:'0x'+'0'.repeat(40)}}));
   assert.equal(validateAgentOperation({tool:'contract.create',arguments:{employeeId:1,amount:'1.25',payday:15,payrollCycle:3,joiningDate:'2026-10-12',contractTerm:'CONTRACTOR',description:'Design'}}).tool,'contract.create');
+  assert.equal(validateAgentOperation({tool:'business.approveQuote',arguments:{id:'saved-bill'}}).tool,'business.approveQuote');
+  assert.throws(()=>validateAgentOperation({tool:'business.approveQuote',arguments:{}}),/record ID/);
 });
 test('MCP URL and address controls reject local, metadata and reserved networks',()=>{
   for(const url of ['http://example.com/mcp','https://localhost/mcp','https://127.0.0.1/mcp','https://[::1]/mcp','https://user:password@example.com/mcp','https://example.com/mcp?token=secret','https://example.com:8443/mcp']) assert.throws(()=>mcpUrl(url));

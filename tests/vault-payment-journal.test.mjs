@@ -28,6 +28,13 @@ test('a direct treasury route prevents a second vault settlement',()=>fixture((r
   assert.throws(()=>journal.reserve(payment(record)),/another payment route/);
   assert.equal(records.get('company',record.id).status,'draft');assert.equal(journal.list('company').length,0);
 }));
+test('a quoted bill needs owner approval bound to its current terms before vault reservation',()=>fixture((records,journal)=>{
+  const record=records.create('company',{kind:'bill',title:'Vendor payment',counterparty:'Vendor',recipient,amount:'0.001',dueDate:'2026-10-11',description:'Services',supplierQuote:{reference:'Q-1',amount:'0.001',receivedDate:'2026-10-10'}});
+  assert.throws(()=>journal.reserve(payment(record)),/owner approval/);
+  assert.equal(records.get('company',record.id).status,'draft');
+  const approved=records.approveSupplierQuote('company',record.id,'owner');
+  assert.equal(journal.reserve(payment(approved)).recordId,record.id);
+}));
 test('reservations enforce aggregate liquidity rather than accepting each payment independently',()=>fixture((records,journal)=>{
   const first=create(records);const second=create(records);
   journal.reserve(payment(first),1000n);

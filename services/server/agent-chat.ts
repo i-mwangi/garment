@@ -6,7 +6,7 @@ import type { AgentChatTurn } from "../../types/agent-chat.ts";
 import type { AgentProposal } from "../../types/agent-operation.ts";
 import { agentToolCatalog, validateAgentOperation } from "./agent-tools.ts";
 import type { AgentRun } from "../../types/agent.ts";
-const withoutVaultTools = new Set(["business.create", "business.issue", "link.create", "expense.create", "workspace.save"]);
+const withoutVaultTools = new Set(["business.create", "business.issue", "business.approveQuote", "link.create", "expense.create", "workspace.save"]);
 export function paymentPlanId(turnId: string, recordId: string) {
   const hex = createHash("sha256").update(`${turnId}:${recordId}`).digest("hex");
   return `${hex.slice(0,8)}-${hex.slice(8,12)}-4${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`;
@@ -55,7 +55,7 @@ export function financeMessageContext(message: string, history: AgentChatTurn[],
   const domains = new Set<string>();
   if (/mpesa|m-pesa|mobile.money|kora|fiat|cash.?out|\b(kes|ngn|ghs)\b|payout/.test(text)) domains.add("payout");
   if (Array.isArray(workspace.externalTools) && workspace.externalTools.length) domains.add("mcp");
-  if (/invoice|bill|vendor|draft|issue|cancel.*payment/.test(text)) domains.add("business");
+  if (/invoice|bill|vendor|supplier|quote|procure|purchase|draft|issue|cancel.*payment/.test(text)) domains.add("business");
   if (/pay|send|settle|transfer/.test(text)) domains.add("payment");
   if (/contract|payroll|salary|agreement/.test(text)) { domains.add("contract"); domains.add("workspace"); }
   if (/contact|employee|client|customer|group|company|branding|address/.test(text)) domains.add("workspace");
