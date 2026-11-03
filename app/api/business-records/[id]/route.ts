@@ -4,6 +4,7 @@ import { openPaymentLinks } from "@/services/server/payment-links";
 import { payNativeObligation } from "@/services/server/near-treasury-service";
 import { openVaultPayments, reconcileVaultPayment } from "@/services/server/vault-payments";
 import { readNearTreasuryIdentity } from "@/services/server/near-treasury-config";
+import { reconcileInvoiceCollection } from "@/services/server/invoice-reconciliation";
 import type { BusinessRecordStatus } from "@/types/business";
 
 export const runtime = "nodejs";
@@ -39,8 +40,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         return Response.json(repository.transition(config.companyId, id, "issued", ["processing"], { paymentLinkCode: link.code }));
       }
       if (body.action !== "refresh") throw new Error("Invoices collect incoming payments through their payment link");
-      const link = record.paymentLinkCode ? links.get(record.paymentLinkCode) : undefined;
-      if (link?.records[0]) record = repository.transition(config.companyId, id, "paid", ["issued", "paid"], { transactionHash: link.records[0].txid });
+      if (record.paymentLinkCode) record = reconcileInvoiceCollection(config.companyId, record.paymentLinkCode, repository, links) || record;
       return Response.json(record);
     }
     if (body.action !== "pay" && body.action !== "refresh") throw new Error("Invalid business record action");
