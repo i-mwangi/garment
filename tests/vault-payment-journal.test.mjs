@@ -65,6 +65,25 @@ test('stale provider results cannot regress terminal state or replace payment id
   assert.equal(journal.events('company').length,3);
 }));
 
+test('verified vault payout evidence is exact, private, and idempotent',()=>fixture((records,journal)=>{
+  const record=create(records);
+  const saved=journal.reserve(payment(record));
+  journal.patch(saved,{executeTransactionHash:txHash,status:'execution_pending'},'Execution submitted');
+  assert.throws(()=>records.recordVerifiedVaultPayout('company',record.id,saved.id,secondHash,'usdc.testnet'),/journal/);
+  assert.equal(records.get('company',record.id).status,'awaiting_approval');
+  const paid=records.recordVerifiedVaultPayout('company',record.id,saved.id,txHash,'usdc.testnet');
+  assert.equal(paid.status,'paid');
+  assert.equal(paid.transactionHash,txHash);
+  const evidence=records.listVerifiedPayouts('company')[0];
+  assert.equal(evidence.amountUnits,'1000');
+  assert.equal(evidence.transactionHash,txHash);
+  assert.deepEqual(records.listVerifiedPayouts('another'),[]);
+  assert.ok(!JSON.stringify(evidence).includes(recipient));
+  assert.ok(!JSON.stringify(evidence).includes(record.counterparty));
+  assert.deepEqual(records.recordVerifiedVaultPayout('company',record.id,saved.id,txHash,'usdc.testnet'),paid);
+  assert.deepEqual(records.listVerifiedPayouts('company'),[evidence]);
+}));
+
 test('pending execution survives a separate process restart without allocating a second payment',()=>fixture((records,journal,path)=>{
   const saved=journal.reserve(payment(create(records)));
   const pending=journal.patch(saved,{status:'execution_pending',executeTransactionHash:txHash},'Submitted');

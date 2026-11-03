@@ -7,6 +7,7 @@ import { assertNearAccountId, isNearTransactionHash } from "../near/account-id.t
 import type { BusinessRecord, BusinessRecordInput, BusinessRecordStatus } from "../../types/business";
 import type { PaymentSchedule, ScheduleStatus } from "../../types/recurring-payment";
 import { nextPaymentDate, scheduledRecordId, validateCalendarDate, validatePaymentSchedule } from "./payment-schedules.ts";
+import type { VaultPayment } from "./vault-payment-journal.ts";
 
 export interface VerifiedSaleEvent {
   companyId: string;
@@ -16,6 +17,15 @@ export interface VerifiedSaleEvent {
   networkId: string;
   tokenContractId: string;
   settledAt: string;
+  recordedAt: string;
+}
+export interface VerifiedPayoutEvent {
+  companyId: string;
+  recordId: string;
+  transactionHash: string;
+  amountUnits: string;
+  networkId: string;
+  tokenContractId: string;
   recordedAt: string;
 }
 
@@ -53,6 +63,11 @@ export class BusinessRecordRepository {
       settled_at TEXT NOT NULL, recorded_at TEXT NOT NULL,
       PRIMARY KEY(company_id,invoice_id));
       CREATE INDEX IF NOT EXISTS business_sale_event_listing ON business_sale_events(company_id,settled_at);`);
+    this.database.exec(`CREATE TABLE IF NOT EXISTS business_payout_events(
+      company_id TEXT NOT NULL, record_id TEXT NOT NULL, transaction_hash TEXT NOT NULL UNIQUE,
+      amount_units TEXT NOT NULL, network_id TEXT NOT NULL, token_contract_id TEXT NOT NULL,
+      recorded_at TEXT NOT NULL, PRIMARY KEY(company_id,record_id));
+      CREATE INDEX IF NOT EXISTS business_payout_event_listing ON business_payout_events(company_id,recorded_at);`);
   }
 
   create(companyId: string, input: unknown, requestId?: string): BusinessRecord {
@@ -203,6 +218,31 @@ export class BusinessRecordRepository {
 
   listVerifiedSales(companyId: string): VerifiedSaleEvent[] {
     return this.database.prepare("SELECT company_id AS companyId,invoice_id AS invoiceId,transaction_hash AS transactionHash,amount_units AS amountUnits,network_id AS networkId,token_contract_id AS tokenContractId,settled_at AS settledAt,recorded_at AS recordedAt FROM business_sale_events WHERE company_id=? ORDER BY settled_at DESC,invoice_id DESC LIMIT 500").all(companyId) as unknown as VerifiedSaleEvent[];
+  }
+
+  recordVerifiedVaultPayout(companyId: string, recordId: string, paymentId: string, hash: string, tokenContractId: string): BusinessRecord {
+    if (!isNearTransactionHash(hash)) throw new Error("A native NEAR transaction hash is required");
+    assertNearAccountId(tokenContractId);
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.database.prepare("SELECT record FROM near_vault_payments WHERE company_id=? AND record_id=?").get(companyId, recordId);
+      const payment = row ? JSON.parse(String(row.record)) as VaultPayment : undefined;
+      const record = this.get(companyId, recordId);
+      if (!payment || payment.id !== paymentId || payment.executeTransactionHash !== hash || !["execution_pending", "settlement_verification", "paid"].includes(payment.status) || !["testnet", "mainnet"].includes(payment.networkId)) throw new Error("Verified vault payment journal does not match");
+      if (!record || record.kind === "invoice" || !["awaiting_approval", "paid"].includes(record.status) || record.amount !== payment.amount || record.recipient !== payment.recipient) throw new Error("Saved obligation differs from the vault payment");
+      if (record.status === "paid" && record.transactionHash !== hash) throw new Error("Obligation settlement proof differs from its saved transaction");
+      const paid = record.status === "paid" ? record : this.transition(companyId, recordId, "paid", ["awaiting_approval"], { transactionHash: hash });
+      const event: VerifiedPayoutEvent = { companyId, recordId, transactionHash: hash, amountUnits: parseAmount(payment.amount).toString(), networkId: payment.networkId, tokenContractId, recordedAt: new Date().toISOString() };
+      this.database.prepare("INSERT OR IGNORE INTO business_payout_events VALUES(?,?,?,?,?,?,?)").run(event.companyId, event.recordId, event.transactionHash, event.amountUnits, event.networkId, event.tokenContractId, event.recordedAt);
+      const saved = this.database.prepare("SELECT transaction_hash,amount_units,network_id,token_contract_id FROM business_payout_events WHERE company_id=? AND record_id=?").get(companyId, recordId);
+      if (!saved || saved.transaction_hash !== event.transactionHash || saved.amount_units !== event.amountUnits || saved.network_id !== event.networkId || saved.token_contract_id !== event.tokenContractId) throw new Error("Payout evidence conflicts with the verified settlement");
+      this.database.exec("COMMIT");
+      return paid;
+    } catch (error) { this.database.exec("ROLLBACK"); throw error; }
+  }
+
+  listVerifiedPayouts(companyId: string): VerifiedPayoutEvent[] {
+    return this.database.prepare("SELECT company_id AS companyId,record_id AS recordId,transaction_hash AS transactionHash,amount_units AS amountUnits,network_id AS networkId,token_contract_id AS tokenContractId,recorded_at AS recordedAt FROM business_payout_events WHERE company_id=? ORDER BY recorded_at DESC,record_id DESC LIMIT 500").all(companyId) as unknown as VerifiedPayoutEvent[];
   }
 
   close() { this.database.close(); }

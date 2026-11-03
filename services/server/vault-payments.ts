@@ -73,7 +73,7 @@ export async function reconcileVaultPayment(companyId:string,recordId:string) {
     verifyVaultSettlement(outcome,call,payment,{hash,executorId:context.binding.executorId,tokenId:context.binding.tokenId});
     const final=await verifiedVault(context.binding),observed=await final.payment(payment.id);
     if(!observed || observed.status!=="paid")throw new Error("Native payment completion callback is not verified");matches(payment,observed);
-    const records=openBusinessRecords();try{records.transition(companyId,recordId,"paid",["awaiting_approval","paid"],{transactionHash:hash});}finally{records.close();}
+    const records=openBusinessRecords();try{records.recordVerifiedVaultPayout(companyId,recordId,payment.id,hash,context.binding.tokenId);}finally{records.close();}
     return journal.patch(payment,{transactionHash:hash,status:"paid"},`Native USDC settlement verified: ${hash}`);
    }
   }
