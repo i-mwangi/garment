@@ -42,7 +42,14 @@ export function validateBusinessRecord(value: unknown): BusinessRecordInput {
   const timestamp = Date.parse(dueDate);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || !Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== dueDate) throw new Error("A valid due date is required");
   if (input.receiptUrls !== undefined && (!Array.isArray(input.receiptUrls) || input.receiptUrls.length > 5 || input.receiptUrls.some(url => typeof url !== "string" || !/^\/api\/uploads\/[0-9a-f-]{36}\.(png|jpeg)$/.test(url)))) throw new Error("Up to five uploaded receipt images are supported");
-  return { kind: input.kind, title: String(input.title).trim(), counterparty: String(input.counterparty).trim(), description: String(input.description), dueDate: String(input.dueDate), amount: String(input.amount), recipient: input.recipient as BusinessRecordInput["recipient"], ...(input.receiptUrls === undefined ? {} : { receiptUrls: input.receiptUrls as string[] }) };
+  let supplierQuote: BusinessRecordInput["supplierQuote"];
+  if (input.supplierQuote !== undefined) {
+    if (input.kind !== "bill" || !input.supplierQuote || typeof input.supplierQuote !== "object" || Array.isArray(input.supplierQuote)) throw new Error("Supplier quote details are supported only for bills");
+    const quote = input.supplierQuote as Record<string, unknown>;
+    if (Object.keys(quote).length !== 3 || typeof quote.reference !== "string" || !quote.reference.trim() || quote.reference.length > 160 || typeof quote.amount !== "string" || parseAmount(quote.amount) <= 0n || typeof quote.receivedDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(quote.receivedDate) || !Number.isFinite(Date.parse(quote.receivedDate)) || new Date(quote.receivedDate).toISOString().slice(0, 10) !== quote.receivedDate) throw new Error("Complete supplier quote reference, amount and received date are required");
+    supplierQuote = { reference: quote.reference.trim(), amount: quote.amount, receivedDate: quote.receivedDate };
+  }
+  return { kind: input.kind, title: String(input.title).trim(), counterparty: String(input.counterparty).trim(), description: String(input.description), dueDate: String(input.dueDate), amount: String(input.amount), recipient: input.recipient as BusinessRecordInput["recipient"], ...(input.receiptUrls === undefined ? {} : { receiptUrls: input.receiptUrls as string[] }), ...(supplierQuote === undefined ? {} : { supplierQuote }) };
 }
 
 export class BusinessRecordRepository {

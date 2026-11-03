@@ -112,6 +112,12 @@ export function BusinessWorkspace({ kind, initialCreate = false, recordId, initi
                 ? treasury.data?.treasuryAddress || ""
                 : String(form.get("recipient"))),
         };
+        if (kind === "bill") {
+            const reference = String(form.get("quoteReference") || "").trim();
+            const quoteAmount = String(form.get("quoteAmount") || "").trim();
+            const receivedDate = String(form.get("quoteReceivedDate") || "").trim();
+            if (reference || quoteAmount || receivedDate) input.supplierQuote = { reference, amount: quoteAmount, receivedDate };
+        }
         try {
             if (!editing && draftRequest.current)
                 input = draftRequest.current.input;
@@ -257,6 +263,13 @@ export function BusinessWorkspace({ kind, initialCreate = false, recordId, initi
                   Description
                   <textarea name="description" required maxLength={4000} defaultValue={editing?.description} className={fieldClass}/>
                 </label>
+                {kind === "bill" && <fieldset className="grid gap-4 md:col-span-2 md:grid-cols-3">
+                    <legend className="mb-2 font-medium">Supplier quote · optional</legend>
+                    <label>Reference<input name="quoteReference" maxLength={160} defaultValue={editing?.supplierQuote?.reference} className={fieldClass}/></label>
+                    <label>Quoted amount (USDC)<input name="quoteAmount" inputMode="decimal" pattern="[0-9]+(\.[0-9]{1,6})?" defaultValue={editing?.supplierQuote?.amount} className={fieldClass}/></label>
+                    <label>Received date<input name="quoteReceivedDate" type="date" defaultValue={editing?.supplierQuote?.receivedDate} className={fieldClass}/></label>
+                    <p className="text-sm text-text-secondary md:col-span-3">Enter all three fields when supplied. This is a saved reference from your supplier, not independent quote verification or payment approval.</p>
+                  </fieldset>}
                 {kind === "reimbursement" && (<label className="md:col-span-2">
                     Receipt images · up to five PNG/JPEG files
                     <input name="receipts" type="file" accept="image/png,image/jpeg" multiple disabled={isSaving}/>

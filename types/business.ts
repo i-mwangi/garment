@@ -12,6 +12,7 @@ export interface BusinessRecordInput {
   dueDate: string;
   description: string;
   receiptUrls?: string[];
+  supplierQuote?: { reference: string; amount: string; receivedDate: string };
 }
 
 export interface BusinessRecord extends BusinessRecordInput {

@@ -74,6 +74,11 @@ export function BusinessRecordPresentation({
           </div>
         </dl>
       </div>
+      {record.kind === "bill" && record.supplierQuote && <section aria-label="Supplier quote" className="rounded-2xl border border-primary-divider bg-background p-5 text-sm">
+        <h3 className="font-semibold">Supplier quote</h3>
+        <dl className="mt-3 grid gap-3 sm:grid-cols-3"><div><dt className="text-text-secondary">Reference</dt><dd className="break-words">{record.supplierQuote.reference}</dd></div><div><dt className="text-text-secondary">Quoted amount</dt><dd className="num">{record.supplierQuote.amount} USDC</dd></div><div><dt className="text-text-secondary">Received</dt><dd>{record.supplierQuote.receivedDate}</dd></div></dl>
+        <p className="mt-3 text-text-secondary">Submitted quote details. Settlbox has not independently verified the supplier or quote.</p>
+      </section>}
       <h3 className="text-xl font-semibold">Summary</h3>
       <div className="overflow-hidden rounded-2xl border border-primary-divider">
         <div className="flex justify-between gap-4 border-b border-primary-divider bg-app-background px-5 py-3 text-sm text-text-secondary">

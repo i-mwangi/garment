@@ -183,3 +183,21 @@ test("business validation rejects invalid calendar dates and inexact amounts", (
   assert.throws(() => validateBusinessRecord({ ...details, kind: "bill", amount: "0.0000001" }), /precision/);
   assert.equal(validateBusinessRecord({ ...details, kind: "payroll", amount: "0.000001" }).amount, "0.000001");
 });
+
+test("bill drafts retain exact user-supplied supplier quote details", () => {
+  const directory = mkdtempSync(join(tmpdir(), "settlbox-supplier-quote-"));
+  const repository = new BusinessRecordRepository(join(directory, "business.sqlite"));
+  const quote = { reference: "Supplier offer 2026-11", amount: "0.001001", receivedDate: "2026-11-03" };
+  try {
+    const bill = repository.create("company", { ...details, kind: "bill", supplierQuote: quote });
+    assert.deepEqual(bill.supplierQuote, quote);
+    assert.deepEqual(repository.get("company", bill.id).supplierQuote, quote);
+    assert.throws(() => repository.create("company", { ...details, kind: "invoice", supplierQuote: quote }), /only for bills/);
+    assert.throws(() => validateBusinessRecord({ ...details, kind: "bill", supplierQuote: { ...quote, receivedDate: "2026-02-30" } }), /supplier quote/);
+    assert.throws(() => validateBusinessRecord({ ...details, kind: "bill", supplierQuote: { ...quote, amount: "0.0000001" } }), /precision/);
+    const changed = repository.updateDraft("company", bill.id, { ...bill, supplierQuote: { ...quote, reference: "Revised supplier offer" } });
+    assert.equal(changed.supplierQuote.reference, "Revised supplier offer");
+    repository.transition("company", bill.id, "awaiting_approval", ["draft"]);
+    assert.throws(() => repository.updateDraft("company", bill.id, { ...bill, supplierQuote: quote }), /draft/);
+  } finally { repository.close(); rmSync(directory, { recursive: true }); }
+});
