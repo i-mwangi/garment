@@ -33,3 +33,15 @@ test("latest saved proposal state replaces its stale conversation snapshot", () 
   assert.match(steps.at(-1).detail, /Reconcile/);
   assert.equal(steps.at(-1).at, undefined);
 });
+
+test("activity shows only persisted proposal transitions with their recorded times", () => {
+  const timeline = [
+    { status: "pending", at: "2026-11-03T12:00:01.000Z" },
+    { status: "running", at: "2026-11-03T12:00:03.000Z" },
+    { status: "uncertain", at: "2026-11-03T12:00:05.000Z" },
+  ];
+  const steps = agentActivity({ ...turn, proposal }, { ...proposal, status: "uncertain", timeline });
+  assert.deepEqual(steps.slice(-3).map(step => step.state), ["waiting", "active", "unknown"]);
+  assert.deepEqual(steps.slice(-3).map(step => step.at), timeline.map(event => event.at));
+  assert.equal(steps.some(step => step.title.includes("completed")), false);
+});

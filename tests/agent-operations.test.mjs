@@ -39,12 +39,16 @@ test('operation approvals are immutable, scoped, durable and claimed only once',
   try {
     const operation={tool:'business.issue',arguments:{id:'saved-invoice'}};
     const proposal=store.prepare('company','owner','turn',operation);
+    assert.deepEqual(proposal.timeline.map(event=>event.status),['pending']);
     assert.equal(store.get('other','owner',proposal.id),undefined); assert.equal(store.get('company','other',proposal.id),undefined);
     assert.throws(()=>store.prepare('company','owner','turn',{...operation,arguments:{id:'different'}}),/different proposal/);
     assert.equal(store.prepare('company','owner','another-turn',operation).id,proposal.id);
     store.claim('company','owner',proposal.id); store.close(); store=new AgentProposalRepository(path);
     assert.throws(()=>store.claim('company','owner',proposal.id),/already handled/);
     store.finish('company','owner',proposal.id,'uncertain',undefined,'Check provider');
+    const timeline=store.get('company','owner',proposal.id).timeline;
+    assert.deepEqual(timeline.map(event=>event.status),['pending','running','uncertain']);
+    assert.ok(timeline.every(event=>Number.isFinite(Date.parse(event.at))));
     assert.equal(store.prepare('company','owner','third-turn',operation).id,proposal.id);
     const cancelled=store.prepare('company','owner','fourth-turn',{tool:'business.cancel',arguments:{id:'saved-invoice'}});
     store.cancel('company','owner',cancelled.id); assert.throws(()=>store.claim('company','owner',cancelled.id));

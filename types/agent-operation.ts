@@ -13,4 +13,5 @@ export interface AgentProposal {
   expiresAt: string;
   result?: unknown;
   error?: string;
+  timeline?: { status: AgentProposal["status"]; at: string }[];
 }

@@ -36,6 +36,12 @@ export function agentActivity(turn: AgentChatTurn, currentProposal?: AgentPropos
     cancelled: ["Review dismissed", "No action was confirmed through this draft.", "recorded"],
   } as const;
   const [title, detail, state] = current[proposal.status];
-  steps.push({ id: "current", title, detail, state });
+  if (proposal.timeline?.length) {
+    for (const [index, event] of proposal.timeline.entries()) {
+      const [eventTitle, eventDetail, eventState] = current[event.status];
+      steps.push({ id: `event-${index}`, title: eventTitle, detail: eventDetail, state: eventState, at: event.at });
+    }
+    if (proposal.timeline.at(-1)?.status !== proposal.status) steps.push({ id: "current", title, detail, state });
+  } else steps.push({ id: "current", title, detail, state });
   return steps;
 }
