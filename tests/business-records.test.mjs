@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { BusinessRecordRepository, validateBusinessRecord } from "../services/server/business-records.ts";
 import { PaymentLinkRepository } from "../services/server/payment-links.ts";
-import { reconcileInvoiceCollections } from "../services/server/invoice-reconciliation.ts";
+import { reconcileInvoiceCollection, reconcileInvoiceCollections } from "../services/server/invoice-reconciliation.ts";
 
 const details = { kind: "invoice", title: "Consulting", counterparty: "Customer", recipient: "alice.testnet", amount: "0.001", dueDate: "2026-10-09", description: "Consulting services" };
 
@@ -122,6 +122,29 @@ test("invoice collection reconciliation persists once and isolates companies", (
     assert.deepEqual(reconcileInvoiceCollections("company", repository, links)[0], paid);
     assert.equal(links.get(link.code).records.length, 1);
   } finally { links.close(); repository.close(); rmSync(directory, { recursive: true }); }
+});
+
+test("a verified link immediately settles only its matching issued invoice", () => {
+  const directory = mkdtempSync(join(tmpdir(), "settlbox-immediate-collection-"));
+  const path = join(directory, "business.sqlite");
+  const records = new BusinessRecordRepository(path);
+  const links = new PaymentLinkRepository(path);
+  try {
+    const invoice = records.create("company", details);
+    const link = links.create({ ...details, paymentWalletAddress: details.recipient }, invoice.id);
+    records.transition("company", invoice.id, "issued", ["draft"], { paymentLinkCode: link.code });
+    const hash = encodeBase58(new Uint8Array(32).fill(14));
+    assert.equal(reconcileInvoiceCollection("company", link.code, records, links).status, "issued");
+    links.record(link.code, hash, details.recipient, details.amount);
+    assert.equal(reconcileInvoiceCollection("another", link.code, records, links), undefined);
+    const paid = reconcileInvoiceCollection("company", link.code, records, links);
+    assert.equal(paid.status, "paid");
+    assert.equal(paid.transactionHash, hash);
+    assert.deepEqual(reconcileInvoiceCollection("company", link.code, records, links), paid);
+    const independent = links.create({ ...details, paymentWalletAddress: details.recipient });
+    links.record(independent.code, encodeBase58(new Uint8Array(32).fill(15)), details.recipient, details.amount);
+    assert.equal(reconcileInvoiceCollection("company", independent.code, records, links), undefined);
+  } finally { links.close(); records.close(); rmSync(directory, { recursive: true }); }
 });
 
 test("business validation rejects invalid calendar dates and inexact amounts", () => {

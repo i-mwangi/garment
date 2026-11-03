@@ -3,6 +3,9 @@ import { openPaymentLinks } from "@/services/server/payment-links";
 import { createNearReader } from "@/services/near/rpc";
 import { assertNearAccountId, isNearTransactionHash } from "@/services/near/account-id";
 import { verifyNearLinkSettlement } from "@/services/near/link-settlement";
+import { openBusinessRecords } from "@/services/server/business-records";
+import { reconcileInvoiceCollection } from "@/services/server/invoice-reconciliation";
+import { readNearTreasuryIdentity } from "@/services/server/near-treasury-config";
 
 export const runtime = "nodejs";
 
@@ -25,6 +28,9 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
     const block = await reader.rpc<{ header: { timestamp_nanosec: string } }>("block", { block_id: tokenReceipt.block_hash });
     const payer = verifyNearLinkSettlement(link, outcome, { tokenId: reader.network.usdcContractId, signerId: body.signerId, hash: body.txid, blockTimestampNs: block.header.timestamp_nanosec });
     const result = repository.record(code, body.txid, payer, link.amount);
+    const records = openBusinessRecords();
+    try { reconcileInvoiceCollection(readNearTreasuryIdentity().companyId, code, records, repository); }
+    finally { records.close(); }
     return Response.json({ status: "confirmed", transactionHash: body.txid, paymentCount: result.records.length });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Payment could not be verified" }, { status: 409 }); }
   finally { repository.close(); }

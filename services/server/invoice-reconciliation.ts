@@ -1,10 +1,21 @@
 import type { BusinessRecordRepository } from "./business-records";
 import type { PaymentLinkRepository } from "./payment-links";
 
+export function reconcileInvoiceCollection(companyId: string, code: string, repository: BusinessRecordRepository, links: PaymentLinkRepository) {
+  const record = repository.get(companyId, code);
+  if (!record || record.kind !== "invoice" || record.paymentLinkCode !== code || !["issued", "paid"].includes(record.status)) return undefined;
+  const settlement = links.get(code)?.records[0];
+  if (!settlement) return record;
+  if (record.status === "paid") {
+    if (record.transactionHash !== settlement.txid) throw new Error("Invoice settlement proof differs from its saved transaction");
+    return record;
+  }
+  return repository.transition(companyId, record.id, "paid", ["issued"], { transactionHash: settlement.txid });
+}
+
 export function reconcileInvoiceCollections(companyId: string, repository: BusinessRecordRepository, links: PaymentLinkRepository) {
   return repository.list(companyId).map(record => {
     if (record.kind !== "invoice" || record.status !== "issued" || !record.paymentLinkCode) return record;
-    const settlement = links.get(record.paymentLinkCode)?.records[0];
-    return settlement ? repository.transition(companyId, record.id, "paid", ["issued"], { transactionHash: settlement.txid }) : record;
+    return reconcileInvoiceCollection(companyId, record.paymentLinkCode, repository, links) || record;
   });
 }
