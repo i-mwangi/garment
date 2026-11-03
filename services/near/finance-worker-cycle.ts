@@ -2,6 +2,7 @@ import type { FinanceAutomation } from "../server/finance-worker-store.ts";
 export interface WorkerPayment { recordId: string; status: string }
 export interface FinanceCycleTools {
   active(): boolean;
+  canSubmit(): boolean;
   audit(message: string): void;
   list(): WorkerPayment[];
   reconcile(recordId: string): Promise<WorkerPayment>;
@@ -18,15 +19,15 @@ export async function financeWorkerCycle(config: FinanceAutomation, tools: Finan
     try {
       const payment = await tools.reconcile(saved.recordId);
       tools.audit(`Reconciled ${saved.recordId}: ${payment.status}`);
-      if (payment.status === "ready" && submitted < config.maxActions && tools.active()) {
+      if (payment.status === "ready" && submitted < config.maxActions && tools.active() && tools.canSubmit()) {
         submitted++; await tools.execute(payment.recordId); tools.audit(`Execution requested for approved obligation ${payment.recordId}`);
       }
     } catch { tools.audit(`Obligation ${saved.recordId} needs review; no fallback payment was attempted`); }
   }
-  if (config.autoQueue && submitted < config.maxActions && tools.active()) {
+  if (config.autoQueue && submitted < config.maxActions && tools.active() && tools.canSubmit()) {
     const plan = await tools.candidates();
     for (const recordId of [...new Set(plan.recordIds)]) {
-      if (submitted >= config.maxActions || !tools.active()) break;
+      if (submitted >= config.maxActions || !tools.active() || !tools.canSubmit()) break;
       try { submitted++; await tools.queue(plan.runId, recordId); tools.audit(`Queue requested for eligible due obligation ${recordId}`); }
       catch { tools.audit(`Obligation ${recordId} could not be queued; review its current policy and funding`); }
     }

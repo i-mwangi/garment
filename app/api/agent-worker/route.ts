@@ -3,6 +3,7 @@ import { runSlackNotifications } from "@/services/server/provider-integrations";
 import { timingSafeEqual } from "node:crypto";
 import { requireOperatorSession, requireSameOrigin } from "@/services/server/operator-session";
 import { openFinanceWorker, runFinanceWorker } from "@/services/server/finance-worker";
+import { openBusinessPolicy } from "@/services/server/business-policy";
 export const runtime = "nodejs";
 const headers = { "Cache-Control": "no-store" };
 function workerAuthorized(request: Request) {
@@ -14,8 +15,8 @@ function workerAuthorized(request: Request) {
 export async function GET(request: Request) {
   try { const principal = requireOperatorSession(request); if (principal.role !== "OWNER") return Response.json({ error: "Owner access is required" }, { status: 403, headers }); }
   catch { return Response.json({ error: "Workspace authorization is required" }, { status: 401, headers }); }
-  const store = openFinanceWorker();
-  try { const company = readNearTreasuryIdentity().companyId; return Response.json({ config: store.config(company), events: store.history(company), runnerConfigured: Boolean(process.env.SETTLBOX_FINANCE_WORKER_TOKEN && process.env.SETTLBOX_FINANCE_WORKER_TOKEN.length >= 32) }, { headers }); } finally { store.close(); }
+  const store = openFinanceWorker(), policyStore = openBusinessPolicy();
+  try { const company = readNearTreasuryIdentity().companyId; const policy = policyStore.get(company); return Response.json({ config: store.config(company), events: store.history(company), policy: { stopped: policy.stopped, allowAutonomousPayments: policy.allowAutonomousPayments, revision: policy.revision }, runnerConfigured: Boolean(process.env.SETTLBOX_FINANCE_WORKER_TOKEN && process.env.SETTLBOX_FINANCE_WORKER_TOKEN.length >= 32) }, { headers }); } finally { store.close(); policyStore.close(); }
 }
 export async function POST(request: Request) {
   const worker = workerAuthorized(request); let actor = "finance-worker";

@@ -42,7 +42,7 @@ test('leases reject overlapping cycles and stale release; stopping invalidates a
 });
 function tools(overrides={}) {
   const calls=[];
-  return {calls,active:()=>true,audit:()=>{},list:()=>[],reconcile:async id=>({recordId:id,status:'awaiting_approval'}),execute:async id=>calls.push(`execute:${id}`),candidates:async()=>({runId:'run',recordIds:['a','a','b','c']}),queue:async(_run,id)=>calls.push(`queue:${id}`),...overrides};
+  return {calls,active:()=>true,canSubmit:()=>true,audit:()=>{},list:()=>[],reconcile:async id=>({recordId:id,status:'awaiting_approval'}),execute:async id=>calls.push(`execute:${id}`),candidates:async()=>({runId:'run',recordIds:['a','a','b','c']}),queue:async(_run,id)=>calls.push(`queue:${id}`),...overrides};
 }
 test('disabled cycles make no requests; queue attempts are deduplicated and bounded',async()=>{
   const stopped=tools();await financeWorkerCycle({...config,enabled:false},stopped);assert.deepEqual(stopped.calls,[]);
@@ -73,6 +73,19 @@ test('uncertain execution is reconciled on the next cycle without another submis
 test('stop while AI planning is pending prevents queue requests',async()=>{
   let active=true;
   const worker=tools({active:()=>active,candidates:async()=>{active=false;return {runId:'run',recordIds:['a']};}});
+  await financeWorkerCycle(config,worker);
+  assert.deepEqual(worker.calls,[]);
+});
+
+test('policy stop still reconciles an in-flight payment without a new submission',async()=>{
+  const worker=tools({canSubmit:()=>false,list:()=>[{recordId:'a',status:'execution_pending'}],reconcile:async id=>{worker.calls.push(`reconcile:${id}`);return {recordId:id,status:'ready'};}});
+  await financeWorkerCycle(config,worker);
+  assert.deepEqual(worker.calls,['reconcile:a']);
+});
+
+test('policy revision change after reconciliation blocks signing in the same cycle',async()=>{
+  let allowed=true;
+  const worker=tools({canSubmit:()=>allowed,list:()=>[{recordId:'a',status:'execution_pending'}],reconcile:async id=>{allowed=false;return {recordId:id,status:'ready'};}});
   await financeWorkerCycle(config,worker);
   assert.deepEqual(worker.calls,[]);
 });

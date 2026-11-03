@@ -10,6 +10,7 @@ import { useDemo } from "@/presentation/contexts/DemoProvider";
 import HumanWallet from "./HumanWallet";
 import VaultPayments, { QueueVaultPayment } from "./VaultPayments";
 import Automation from "./Automation";
+import BusinessPolicyControls from "./BusinessPolicy";
 
 export default function AdvancedAgentControls() {
   const { activeEntityId } = useDemo();
@@ -51,6 +52,7 @@ export default function AdvancedAgentControls() {
     {enabled && <HumanWallet administrator={vault.data?.state === "verified" ? vault.data.administrator : undefined} />}
     {enabled && <VaultPayments />}
     {enabled && <Automation />}
+    {enabled && <BusinessPolicyControls />}
     <div className="rounded-2xl border border-primary-divider bg-background p-5 space-y-4">
       <p className="text-sm text-text-secondary">Preparing a plan sends no payments. Vault queueing and execution are separate actions; required approvals are signed through Web3Auth.</p>
       <p className="text-sm text-text-secondary">Vault plans use only funds held by the vault. The contract liquidity floor is reserved separately from the additional amount below.</p>
