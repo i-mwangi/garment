@@ -8,6 +8,7 @@ import { useAuth } from "@/services/auth/context";
 import toast from "react-hot-toast";
 import { assertNearAccountId } from "@/services/near/account-id";
 import { parseAmount } from "@/services/near/amount";
+import BatchReview from "./BatchReview";
 
 export function BatchTransactionContainer() {
   const { user } = useAuth();
@@ -15,6 +16,7 @@ export function BatchTransactionContainer() {
   const [payments, setPayments] = useState<BusinessRecordInput[]>([]);
   const [saved, setSaved] = useState<BusinessRecord[]>([]);
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState<"prepare" | "review">("prepare");
   const submitted = useRef<{ id: string; payments: BusinessRecordInput[] } | null>(null);
   const saving = useRef(false);
   const canManage = user?.role === "OWNER" || user?.role === "ADMIN";
@@ -45,7 +47,7 @@ export function BatchTransactionContainer() {
       const result: unknown = await response.json();
       if (!response.ok) { if (response.status === 400) submitted.current = null; throw new Error(result && typeof result === "object" && "error" in result ? String(result.error) : "Batch could not be saved; retry the same request"); }
       setSaved(result as BusinessRecord[]);
-      setPayments([]); submitted.current = null;
+      setPayments([]); submitted.current = null; setStep("prepare");
       await client.invalidateQueries({ queryKey: ["business-records"] });
       toast.success("Batch drafts saved. Review each payment before release.");
     } catch (error) { toast.error(error instanceof Error ? error.message : "Batch could not be saved"); }
@@ -54,6 +56,8 @@ export function BatchTransactionContainer() {
 
   const field = "w-full rounded-lg border border-primary-divider bg-background p-3";
   return <section className="space-y-5 p-6 text-text-primary"><header><h1 className="text-2xl font-semibold">Batch payments</h1><p>Prepare up to 100 USDC payment drafts for NEAR accounts. Review each saved bill before release.</p></header>
+    {step === "review" && <BatchReview payments={payments} busy={busy} retrying={!!submitted.current} onBack={() => setStep("prepare")} onSave={() => void save()} />}
+    {step === "prepare" && <>
     {canManage && <form onSubmit={add} className="grid gap-3 rounded-xl border border-primary-divider p-5 md:grid-cols-2"><fieldset disabled={busy || !!submitted.current} className="contents">
       <label>Title<input name="title" required maxLength={160} className={field} /></label><label>Vendor<input name="counterparty" required maxLength={160} className={field} /></label>
       <label>USDC amount<input name="amount" required pattern="[0-9]+(\.[0-9]{1,6})?" inputMode="decimal" className={field} /></label><label>Due date<input name="dueDate" type="date" required className={field} /></label>
@@ -61,7 +65,8 @@ export function BatchTransactionContainer() {
       <button type="submit" disabled={payments.length >= 100} className="rounded-lg border border-primary-divider p-3">Add to batch</button>
     </fieldset></form>}
     {payments.map((payment, index) => <article key={index} className="flex flex-wrap justify-between gap-3 rounded-lg border border-primary-divider p-4"><span>{payment.title} · {payment.amount} USDC</span><span className="break-all">{payment.recipient}</span><button disabled={busy || !!submitted.current} onClick={() => setPayments(previous => previous.filter((_, row) => row !== index))}>Remove</button></article>)}
-    {!!payments.length && canManage && <button onClick={() => { void save(); }} disabled={busy} className="rounded-lg bg-primary-blue px-5 py-3 text-white">{busy ? "Saving…" : submitted.current ? "Retry saving batch" : `Save ${payments.length} payment drafts`}</button>}
+    {!!payments.length && canManage && <button onClick={() => setStep("review")} disabled={busy} className="rounded-lg bg-primary-blue px-5 py-3 text-white">Review {payments.length} payment drafts</button>}
+    </>}
     {saved.map(record => <Link key={record.id} href={`/bill/detail?id=${record.id}`} className="block rounded-lg border border-primary-divider p-4">Review {record.title} · {record.amount} USDC</Link>)}
     <Link href="/bill" className="block text-primary-blue">View all saved bills</Link>
   </section>;
