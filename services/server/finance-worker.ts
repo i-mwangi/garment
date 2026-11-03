@@ -5,7 +5,7 @@ import { FinanceWorkerStore } from "./finance-worker-store";
 import { financeWorkerCycle } from "../near/finance-worker-cycle";
 import { openVaultPayments, executeVaultPayment, queueVaultPayment, reconcileVaultPayment, vaultPaymentContext } from "./vault-payments";
 import { parseAmount } from "../near/amount";
-import { openBusinessRecords } from "./business-records";
+import { isOwnerApprovedProcurementBill, openBusinessRecords } from "./business-records";
 import { openAgentRuns } from "./agent-runs";
 import { vaultPlanningContext } from "./vault-planning";
 import { planBusinessActions } from "../near/agent-planner";
@@ -37,6 +37,12 @@ export async function runFinanceWorker(companyId: string) {
         try {
           const payment = journal.get(companyId, recordId);
           if (!payment || !canSubmit()) throw new Error("Worker stopped or payment unavailable");
+          const records = openBusinessRecords();
+          try {
+            const obligation = records.get(companyId, recordId);
+            if (!obligation) throw new Error("Saved obligation is unavailable");
+            if (obligation.kind === "bill" && !isOwnerApprovedProcurementBill(obligation)) throw new Error("Bill needs current owner-approved supplier terms before unattended payment");
+          } finally { records.close(); }
           if (parseAmount(context.vault.balanceUsdc) < parseAmount(payment.amount) + parseAmount(context.vault.policy.liquidityFloorUsdc) + parseAmount(lease.config.reserveUsdc)) throw new Error("Worker liquidity reserve prevents execution");
           businessPolicy!.reserve(companyId, payment.recordId, "treasury", payment.amount, policyRevision);
         } finally { journal.close(); }
@@ -48,6 +54,7 @@ export async function runFinanceWorker(companyId: string) {
         try {
           const record = records.get(companyId, recordId);
           if (!record) throw new Error("Saved obligation is unavailable");
+          if (record.kind === "bill" && !isOwnerApprovedProcurementBill(record)) throw new Error("Bill needs current owner-approved supplier terms before unattended queueing");
           const singleLimit = businessPolicy!.get(companyId).maxSinglePaymentUsdc;
           if (parseAmount(record.amount) > parseAmount(singleLimit)) throw new Error("Business policy single-payment limit prevents queueing");
         } finally { records.close(); }
@@ -60,7 +67,12 @@ export async function runFinanceWorker(companyId: string) {
           const request = { requestId: randomUUID(), throughDate: today, reserveUsdc: lease.config.reserveUsdc };
           const context = await vaultPlanningContext(companyId, records.list(companyId));
           const plan = planBusinessActions(request, context);
-          const eligible = plan.actions.filter(action => action.tool === "review_payment" && action.disposition === "review");
+          const obligations = new Map(records.list(companyId).map(record => [record.id, record]));
+          const eligible = plan.actions.filter(action => {
+            if (action.tool !== "review_payment" || action.disposition !== "review") return false;
+            const obligation = obligations.get(action.recordId);
+            return !!obligation && (obligation.kind !== "bill" || isOwnerApprovedProcurementBill(obligation));
+          });
           if (!eligible.length) return { runId: request.requestId, recordIds: [] };
           const reviewed = await reviewAgentPlan(plan);
           const binding = readNearDeployment().treasury;

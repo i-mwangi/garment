@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { BusinessRecordRepository, validateBusinessRecord } from "../services/server/business-records.ts";
+import { BusinessRecordRepository, isOwnerApprovedProcurementBill, validateBusinessRecord } from "../services/server/business-records.ts";
 import { PaymentLinkRepository } from "../services/server/payment-links.ts";
 import { reconcileInvoiceCollection, reconcileInvoiceCollections } from "../services/server/invoice-reconciliation.ts";
 
@@ -193,13 +193,18 @@ test("bill drafts retain exact user-supplied supplier quote details", () => {
     assert.deepEqual(bill.supplierQuote, quote);
     assert.deepEqual(repository.get("company", bill.id).supplierQuote, quote);
     assert.throws(() => repository.approveSupplierQuote("another", bill.id, "owner"), /draft bill/);
+    assert.equal(isOwnerApprovedProcurementBill(bill), false);
     const approved = repository.approveSupplierQuote("company", bill.id, "owner");
+    assert.equal(isOwnerApprovedProcurementBill(approved), true);
+    assert.equal(isOwnerApprovedProcurementBill({ ...approved, amount: "0.002" }), false);
+    assert.equal(isOwnerApprovedProcurementBill(repository.create("company", { ...details, kind: "bill" })), false);
     assert.equal(approved.supplierQuoteApproval.approvedBy, "owner");
     assert.deepEqual(repository.approveSupplierQuote("company", bill.id, "owner"), approved);
     assert.throws(() => repository.create("company", { ...details, kind: "invoice", supplierQuote: quote }), /only for bills/);
     assert.throws(() => validateBusinessRecord({ ...details, kind: "bill", supplierQuote: { ...quote, receivedDate: "2026-02-30" } }), /supplier quote/);
     assert.throws(() => validateBusinessRecord({ ...details, kind: "bill", supplierQuote: { ...quote, amount: "0.0000001" } }), /precision/);
     const changed = repository.updateDraft("company", bill.id, { ...bill, supplierQuote: { ...quote, reference: "Revised supplier offer" } });
+    assert.equal(isOwnerApprovedProcurementBill(changed), false);
     assert.equal(changed.supplierQuote.reference, "Revised supplier offer");
     assert.equal(changed.supplierQuoteApproval, undefined);
     assert.equal(repository.approveSupplierQuote("company", bill.id, "owner").supplierQuoteApproval.approvedBy, "owner");

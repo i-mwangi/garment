@@ -57,6 +57,12 @@ export function supplierQuoteFingerprint(record: BusinessRecord): string {
   return createHash("sha256").update(JSON.stringify(validateBusinessRecord(record))).digest("hex");
 }
 
+export function isOwnerApprovedProcurementBill(record: BusinessRecord): boolean {
+  return record.kind === "bill" && !!record.supplierQuote &&
+    !!record.supplierQuoteApproval?.approvedBy &&
+    record.supplierQuoteApproval.fingerprint === supplierQuoteFingerprint(record);
+}
+
 export class BusinessRecordRepository {
   private readonly database: DatabaseSync;
 
