@@ -60,3 +60,21 @@ test('revision and stop switch invalidate new reservations without erasing exist
     assert.equal(store.events('company-a').length, 2);
   } finally { store.close(); }
 });
+
+test('inference charges stay within a reserved ceiling and deduplicate provider responses', () => {
+  const store = new BusinessPolicyStore(':memory:');
+  try {
+    store.update('company-a', enabled, 0, 'owner');
+    store.reserve('company-a', 'call-1', 'inference', '0.25', 1);
+    assert.throws(() => store.recordInferenceCharge('company-a', 'unknown', 'resp-1', '0.1'), /reservation/);
+    assert.throws(() => store.recordInferenceCharge('company-a', 'call-1', 'resp-1', '0.250001'), /reservation/);
+    const saved = store.recordInferenceCharge('company-a', 'call-1', 'resp-1', '0.1');
+    assert.equal(saved.actualUnits, '100000');
+    assert.equal(store.recordInferenceCharge('company-a', 'call-1', 'resp-1', '0.1').existing, true);
+    assert.throws(() => store.recordInferenceCharge('company-a', 'call-1', 'resp-2', '0.1'), /different terms/);
+    store.reserve('company-a', 'call-2', 'inference', '0.25', 1);
+    assert.throws(() => store.recordInferenceCharge('company-a', 'call-2', 'resp-1', '0.1'), /UNIQUE/);
+    assert.equal(store.inferenceCharges('company-a').length, 1);
+    assert.equal(store.inferenceCharges('company-b').length, 0);
+  } finally { store.close(); }
+});

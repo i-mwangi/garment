@@ -68,6 +68,10 @@ export class BusinessPolicyStore {
       CREATE TABLE IF NOT EXISTS business_policy_events(
         id INTEGER PRIMARY KEY, company_id TEXT NOT NULL, actor TEXT NOT NULL,
         event TEXT NOT NULL, revision INTEGER NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS business_inference_charges(
+        company_id TEXT NOT NULL, reservation_id TEXT NOT NULL, response_id TEXT NOT NULL UNIQUE,
+        actual_units TEXT NOT NULL, recorded_at TEXT NOT NULL,
+        PRIMARY KEY(company_id,reservation_id));
     `);
   }
   get(company: string): BusinessPolicy {
@@ -120,6 +124,30 @@ export class BusinessPolicyStore {
   events(company: string) {
     validId(company, "company");
     return this.db.prepare("SELECT actor,event,revision,created_at FROM business_policy_events WHERE company_id=? ORDER BY id DESC LIMIT 100").all(company);
+  }
+  recordInferenceCharge(company: string, reservationId: string, responseId: string, actualUsd: string) {
+    validId(company, "company"); validId(reservationId, "reservation"); validId(responseId, "response");
+    const actualUnits = parseAmount(amount(actualUsd, "Inference charge"), 6);
+    if (actualUnits < 0n) throw new Error("Inference charge cannot be negative");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const reserved = this.db.prepare("SELECT kind,amount_units FROM business_budget_reservations WHERE company_id=? AND reservation_id=?").get(company, reservationId);
+      if (!reserved || reserved.kind !== "inference" || actualUnits > BigInt(String(reserved.amount_units))) throw new Error("Inference charge has no sufficient reservation");
+      const previous = this.db.prepare("SELECT response_id,actual_units,recorded_at FROM business_inference_charges WHERE company_id=? AND reservation_id=?").get(company, reservationId);
+      if (previous) {
+        if (previous.response_id !== responseId || previous.actual_units !== actualUnits.toString()) throw new Error("Inference charge ID belongs to different terms");
+        this.db.exec("COMMIT");
+        return { companyId: company, reservationId, responseId, actualUnits: actualUnits.toString(), recordedAt: String(previous.recorded_at), existing: true };
+      }
+      const recordedAt = new Date().toISOString();
+      this.db.prepare("INSERT INTO business_inference_charges VALUES(?,?,?,?,?)").run(company, reservationId, responseId, actualUnits.toString(), recordedAt);
+      this.db.exec("COMMIT");
+      return { companyId: company, reservationId, responseId, actualUnits: actualUnits.toString(), recordedAt, existing: false };
+    } catch (error) { this.db.exec("ROLLBACK"); throw error; }
+  }
+  inferenceCharges(company: string) {
+    validId(company, "company");
+    return this.db.prepare("SELECT reservation_id,response_id,actual_units,recorded_at FROM business_inference_charges WHERE company_id=? ORDER BY recorded_at DESC LIMIT 100").all(company);
   }
   close() { this.db.close(); }
 }
