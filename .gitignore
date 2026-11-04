@@ -100,3 +100,6 @@ Desktop.ini
 /docs/REPLICATION-RESULT.json
 /docs/REPLICATION-STATUS.json
 /docs/AUTONOMOUS-BUSINESS-LOCAL-PLAN.md
+
+# Keep Markdown notes local.
+*.md
