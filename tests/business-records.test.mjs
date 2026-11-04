@@ -189,7 +189,7 @@ test("bill drafts retain exact user-supplied supplier quote details", () => {
   const repository = new BusinessRecordRepository(join(directory, "business.sqlite"));
   const quote = { reference: "Supplier offer 2026-11", amount: "0.001001", receivedDate: "2026-11-03" };
   try {
-    const bill = repository.create("company", { ...details, kind: "bill", supplierQuote: quote });
+    const bill = repository.create("company", { ...details, kind: "bill", amount: quote.amount, supplierQuote: quote });
     assert.deepEqual(bill.supplierQuote, quote);
     assert.deepEqual(repository.get("company", bill.id).supplierQuote, quote);
     assert.throws(() => repository.approveSupplierQuote("another", bill.id, "owner"), /draft bill/);
@@ -197,6 +197,7 @@ test("bill drafts retain exact user-supplied supplier quote details", () => {
     const approved = repository.approveSupplierQuote("company", bill.id, "owner");
     assert.equal(isOwnerApprovedProcurementBill(approved), true);
     assert.equal(isOwnerApprovedProcurementBill({ ...approved, amount: "0.002" }), false);
+    assert.throws(() => repository.approveSupplierQuote("company", repository.create("company", { ...details, kind: "bill", supplierQuote: quote }).id, "owner"), /amount must match/);
     assert.equal(isOwnerApprovedProcurementBill(repository.create("company", { ...details, kind: "bill" })), false);
     assert.equal(approved.supplierQuoteApproval.approvedBy, "owner");
     assert.deepEqual(repository.approveSupplierQuote("company", bill.id, "owner"), approved);

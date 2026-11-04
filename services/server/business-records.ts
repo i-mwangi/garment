@@ -59,6 +59,7 @@ export function supplierQuoteFingerprint(record: BusinessRecord): string {
 
 export function isOwnerApprovedProcurementBill(record: BusinessRecord): boolean {
   return record.kind === "bill" && !!record.supplierQuote &&
+    parseAmount(record.supplierQuote.amount) === parseAmount(record.amount) &&
     !!record.supplierQuoteApproval?.approvedBy &&
     record.supplierQuoteApproval.fingerprint === supplierQuoteFingerprint(record);
 }
@@ -209,6 +210,7 @@ export class BusinessRecordRepository {
     try {
       const record = this.get(companyId, id);
       if (!record || record.kind !== "bill" || record.status !== "draft" || !record.supplierQuote) throw new Error("Only a draft bill with supplier quote can be approved");
+      if (parseAmount(record.supplierQuote.amount) !== parseAmount(record.amount)) throw new Error("Supplier quote amount must match the bill before owner approval");
       const fingerprint = supplierQuoteFingerprint(record);
       if (record.supplierQuoteApproval?.fingerprint === fingerprint) { this.database.exec("COMMIT"); return record; }
       const next: BusinessRecord = { ...record, supplierQuoteApproval: { approvedBy: actor, approvedAt: new Date().toISOString(), fingerprint }, updatedAt: new Date().toISOString() };

@@ -268,7 +268,7 @@ export function BusinessWorkspace({ kind, initialCreate = false, recordId, initi
                     <label>Reference<input name="quoteReference" maxLength={160} defaultValue={editing?.supplierQuote?.reference} className={fieldClass}/></label>
                     <label>Quoted amount (USDC)<input name="quoteAmount" inputMode="decimal" pattern="[0-9]+(\.[0-9]{1,6})?" defaultValue={editing?.supplierQuote?.amount} className={fieldClass}/></label>
                     <label>Received date<input name="quoteReceivedDate" type="date" defaultValue={editing?.supplierQuote?.receivedDate} className={fieldClass}/></label>
-                    <p className="text-sm text-text-secondary md:col-span-3">Enter all three fields when supplied. This is a saved reference from your supplier, not independent quote verification or payment approval.</p>
+                    <p className="text-sm text-text-secondary md:col-span-3">Enter all three fields when supplied. The quoted amount must equal the bill amount before owner approval. Settlbox checks the exact bill terms and the vault recipient policy; it cannot independently confirm the supplier or authenticate the quote.</p>
                   </fieldset>}
                 {kind === "reimbursement" && (<label className="md:col-span-2">
                     Receipt images · up to five PNG/JPEG files
