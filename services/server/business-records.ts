@@ -28,6 +28,12 @@ export interface VerifiedPayoutEvent {
   tokenContractId: string;
   recordedAt: string;
 }
+export interface BusinessTimelineEvent {
+  type: "created" | "status_changed" | "terms_updated" | "supplier_quote_approved" | "sale_verified" | "payout_verified";
+  status: BusinessRecordStatus;
+  occurredAt: string;
+  transactionHash: string | null;
+}
 
 export function validateBusinessRecord(value: unknown): BusinessRecordInput {
   if (typeof value !== "object" || value === null) throw new Error("Business record is required");
@@ -87,6 +93,24 @@ export class BusinessRecordRepository {
       amount_units TEXT NOT NULL, network_id TEXT NOT NULL, token_contract_id TEXT NOT NULL,
       recorded_at TEXT NOT NULL, PRIMARY KEY(company_id,record_id));
       CREATE INDEX IF NOT EXISTS business_payout_event_listing ON business_payout_events(company_id,recorded_at);`);
+    this.database.exec(`CREATE TABLE IF NOT EXISTS business_record_events(
+      id INTEGER PRIMARY KEY, company_id TEXT NOT NULL, record_id TEXT NOT NULL,
+      event_type TEXT NOT NULL, status TEXT NOT NULL, occurred_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS business_record_event_history ON business_record_events(company_id,record_id,id);
+      CREATE TRIGGER IF NOT EXISTS business_record_created AFTER INSERT ON business_records BEGIN
+        INSERT INTO business_record_events(company_id,record_id,event_type,status,occurred_at)
+        VALUES(NEW.company_id,NEW.id,'created',json_extract(NEW.record,'$.status'),json_extract(NEW.record,'$.createdAt'));
+      END;
+      CREATE TRIGGER IF NOT EXISTS business_record_changed AFTER UPDATE OF record ON business_records
+      WHEN OLD.record <> NEW.record BEGIN
+        INSERT INTO business_record_events(company_id,record_id,event_type,status,occurred_at)
+        VALUES(NEW.company_id,NEW.id,
+          CASE WHEN json_extract(OLD.record,'$.status') <> json_extract(NEW.record,'$.status') THEN 'status_changed'
+            WHEN coalesce(json_extract(OLD.record,'$.supplierQuoteApproval.fingerprint'),'') <> coalesce(json_extract(NEW.record,'$.supplierQuoteApproval.fingerprint'),'')
+              AND json_extract(NEW.record,'$.supplierQuoteApproval.fingerprint') IS NOT NULL THEN 'supplier_quote_approved'
+            ELSE 'terms_updated' END,
+          json_extract(NEW.record,'$.status'),json_extract(NEW.record,'$.updatedAt'));
+      END;`);
   }
 
   create(companyId: string, input: unknown, requestId?: string): BusinessRecord {
@@ -103,6 +127,18 @@ export class BusinessRecordRepository {
   get(companyId: string, id: string): BusinessRecord | undefined {
     const row = this.database.prepare("SELECT record FROM business_records WHERE id=? AND company_id=?").get(id, companyId);
     return row && typeof row.record === "string" ? JSON.parse(row.record) as BusinessRecord : undefined;
+  }
+  timeline(companyId: string, id: string): BusinessTimelineEvent[] {
+    const record = this.get(companyId, id);
+    if (!record) throw new Error("Business record not found");
+    const events = this.database.prepare("SELECT event_type AS type,status,occurred_at AS occurredAt FROM business_record_events WHERE company_id=? AND record_id=? ORDER BY id").all(companyId, id) as unknown as Omit<BusinessTimelineEvent, "transactionHash">[];
+    const sale = record.kind === "invoice" ? this.database.prepare("SELECT transaction_hash,recorded_at FROM business_sale_events WHERE company_id=? AND invoice_id=?").get(companyId, id) : undefined;
+    const payout = record.kind !== "invoice" ? this.database.prepare("SELECT transaction_hash,recorded_at FROM business_payout_events WHERE company_id=? AND record_id=?").get(companyId, id) : undefined;
+    const proof = sale || payout;
+    const proofEvents: BusinessTimelineEvent[] = proof ? [{ type: sale ? "sale_verified" : "payout_verified", status: "paid",
+      occurredAt: String(proof.recorded_at), transactionHash: String(proof.transaction_hash) }] : [];
+    return [...events.map(event => ({ ...event, transactionHash: null })), ...proofEvents]
+      .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
   }
   claimPaymentRoute(companyId: string, id: string, route: "treasury" | "vault") {
     this.database.prepare("INSERT OR IGNORE INTO business_payment_routes VALUES(?,?,?)").run(companyId, id, route);

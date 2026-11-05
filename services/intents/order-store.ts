@@ -2,12 +2,14 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { OneClickOrder, OneClickProgress } from "./oneclick.ts";
+import { isNearTransactionHash } from "../near/account-id.ts";
 
 export interface SavedOneClickOrder {
   order: OneClickOrder;
   progress: OneClickProgress;
   amountOutUnits: string | null;
   destinationHashes: string[];
+  verifiedDestination: { transactionHash: string; amountUnits: string; recipient: string; verifiedAt: string } | null;
   updatedAt: string;
 }
 
@@ -30,6 +32,10 @@ export class OneClickOrderStore {
         deposit_address TEXT NOT NULL, deposit_memo TEXT NOT NULL, record TEXT NOT NULL,
         UNIQUE(deposit_address,deposit_memo),
         PRIMARY KEY(company_id,order_id));`);
+    this.db.exec(`CREATE TABLE IF NOT EXISTS intent_verified_destinations(
+      transaction_hash TEXT PRIMARY KEY, company_id TEXT NOT NULL, order_id TEXT NOT NULL,
+      amount_units TEXT NOT NULL, recipient TEXT NOT NULL, verified_at TEXT NOT NULL,
+      UNIQUE(company_id,order_id));`);
   }
   get(companyId: string, orderId: string): SavedOneClickOrder | undefined {
     id(companyId, "company ID"); id(orderId, "order ID");
@@ -38,7 +44,7 @@ export class OneClickOrderStore {
   }
   create(order: OneClickOrder): SavedOneClickOrder {
     id(order.companyId, "company ID"); id(order.id, "order ID");
-    const saved: SavedOneClickOrder = { order, progress: "awaiting_deposit", amountOutUnits: null, destinationHashes: [], updatedAt: new Date().toISOString() };
+    const saved: SavedOneClickOrder = { order, progress: "awaiting_deposit", amountOutUnits: null, destinationHashes: [], verifiedDestination: null, updatedAt: new Date().toISOString() };
     this.db.exec("BEGIN IMMEDIATE");
     try {
       const previous = this.get(order.companyId, order.id);
@@ -62,6 +68,25 @@ export class OneClickOrderStore {
       if (rank[status.progress] < rank[current.progress] || rank[current.progress] === 3 ||
         (rank[status.progress] === 3 && status.progress !== "provider_success_unverified" && status.destinationHashes.length)) throw new Error("Intents status cannot replace a later or terminal outcome");
       const next: SavedOneClickOrder = { ...current, ...status, updatedAt: new Date().toISOString() };
+      this.db.prepare("UPDATE intent_orders SET record=? WHERE company_id=? AND order_id=?").run(JSON.stringify(next), companyId, orderId);
+      this.db.exec("COMMIT"); return next;
+    } catch (error) { this.db.exec("ROLLBACK"); throw error; }
+  }
+  recordVerifiedDestination(companyId: string, orderId: string, proof: { transactionHash: string; amountUnits: string; recipient: string }): SavedOneClickOrder {
+    if (!isNearTransactionHash(proof.transactionHash) || !/^[1-9]\d{0,77}$/.test(proof.amountUnits)) throw new Error("Invalid final destination proof");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const current = this.get(companyId, orderId);
+      if (!current || current.progress !== "provider_success_unverified" || !current.destinationHashes.includes(proof.transactionHash) ||
+        proof.recipient !== current.order.recipient || BigInt(proof.amountUnits) < BigInt(current.order.minimumOutputUnits) ||
+        !current.amountOutUnits || BigInt(proof.amountUnits) < BigInt(current.amountOutUnits)) throw new Error("Final destination proof does not match this order");
+      if (current.verifiedDestination) {
+        if (current.verifiedDestination.transactionHash !== proof.transactionHash || current.verifiedDestination.amountUnits !== proof.amountUnits || current.verifiedDestination.recipient !== proof.recipient) throw new Error("Order already has different destination proof");
+        this.db.exec("COMMIT"); return current;
+      }
+      const verifiedAt = new Date().toISOString();
+      this.db.prepare("INSERT INTO intent_verified_destinations VALUES(?,?,?,?,?,?)").run(proof.transactionHash, companyId, orderId, proof.amountUnits, proof.recipient, verifiedAt);
+      const next = { ...current, verifiedDestination: { ...proof, verifiedAt }, updatedAt: verifiedAt };
       this.db.prepare("UPDATE intent_orders SET record=? WHERE company_id=? AND order_id=?").run(JSON.stringify(next), companyId, orderId);
       this.db.exec("COMMIT"); return next;
     } catch (error) { this.db.exec("ROLLBACK"); throw error; }

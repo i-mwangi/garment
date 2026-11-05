@@ -4,6 +4,7 @@ import { getNearNetwork } from "@/services/near/network";
 import type { BusinessRecord } from "@/types/business";
 import { useGetMyCompany } from "@/services/api/company";
 import { Badge, BadgeStatus } from "@/components/Common/Badge";
+import { BusinessRecordTimeline } from "./BusinessRecordTimeline";
 
 export function BusinessRecordPresentation({
   record,
@@ -79,6 +80,7 @@ export function BusinessRecordPresentation({
         <dl className="mt-3 grid gap-3 sm:grid-cols-3"><div><dt className="text-text-secondary">Reference</dt><dd className="break-words">{record.supplierQuote.reference}</dd></div><div><dt className="text-text-secondary">Quoted amount</dt><dd className="num">{record.supplierQuote.amount} USDC</dd></div><div><dt className="text-text-secondary">Received</dt><dd>{record.supplierQuote.receivedDate}</dd></div></dl>
         <p className="mt-3 text-text-secondary">{record.supplierQuoteApproval ? `Owner approved the exact bill amount, recipient and quote on ${new Date(record.supplierQuoteApproval.approvedAt).toLocaleString()}. Supplier identity and quote authenticity remain unverified.` : "Submitted quote details. The amount must match the bill and an owner must approve its exact terms before unattended payment. Settlbox has not independently verified the supplier or quote."}</p>
       </section>}
+      <BusinessRecordTimeline recordId={record.id} />
       <h3 className="text-xl font-semibold">Summary</h3>
       <div className="overflow-hidden rounded-2xl border border-primary-divider">
         <div className="flex justify-between gap-4 border-b border-primary-divider bg-app-background px-5 py-3 text-sm text-text-secondary">

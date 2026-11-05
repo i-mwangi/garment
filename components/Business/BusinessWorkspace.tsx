@@ -78,6 +78,7 @@ export function BusinessWorkspace({ kind, initialCreate = false, recordId, initi
         }) => request<BusinessRecord>(path, method, body, requestId),
         onSuccess: async () => {
             await client.invalidateQueries({ queryKey: ["business-records"] });
+            await client.invalidateQueries({ queryKey: ["business-timeline"] });
             await client.invalidateQueries({ queryKey: ["payment-links"] });
         },
     });

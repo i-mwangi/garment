@@ -24,6 +24,7 @@ test('accepts only a signed, exact-term, unexpired quote that meets the USDC flo
   const order = acceptOneClickQuote(quote, expected, validSignature);
   assert.equal(order.depositMemo, 'memo-1');
   assert.equal(order.destinationAsset, mainnetUsdcAsset());
+  assert.throws(() => acceptOneClickQuote(quote, expected), /signature/);
   assert.throws(() => acceptOneClickQuote(quote, expected, () => false), /signature/);
   assert.throws(() => acceptOneClickQuote(quote, { ...expected, recipient: 'attacker.near' }, validSignature), /changed/);
   assert.throws(() => acceptOneClickQuote(quote, { ...expected, minimumOutputUnits: '990001' }, validSignature), /required USDC/);
@@ -51,4 +52,18 @@ test('tracks pending, refund and failure without booking a sale', () => {
   }
   assert.throws(() => readOneClickStatus({ correlationId: order.correlationId,
     quoteResponse: { ...quote, quoteRequest: { ...request, recipient: 'other.near' } }, status: 'SUCCESS' }, order, validSignature), /changed/);
+});
+
+test('exact-output checkout fixes the invoice amount and preserves quoted Base input', () => {
+  const checkoutRequest = { ...request, swapType: 'EXACT_OUTPUT', amount: '1000000' };
+  const checkout = { ...quote, quoteRequest: checkoutRequest,
+    quote: { ...quote.quote, amountIn: '1010000', amountOut: '1000000', minAmountOut: '1000000' } };
+  const order = acceptOneClickQuote(checkout, { ...expected, inputUnits: '1000000',
+    minimumOutputUnits: '1000000', swapType: 'EXACT_OUTPUT' }, validSignature);
+  assert.equal(order.inputUnits, '1010000');
+  assert.equal(order.requestAmountUnits, '1000000');
+  assert.equal(order.swapType, 'EXACT_OUTPUT');
+  assert.equal(readOneClickStatus({ correlationId: order.correlationId, quoteResponse: checkout, status: 'PENDING_DEPOSIT' }, order, validSignature).progress, 'awaiting_deposit');
+  assert.throws(() => acceptOneClickQuote({ ...checkout, quote: { ...checkout.quote, amountOut: '999999', minAmountOut: '999999' } },
+    { ...expected, minimumOutputUnits: '999999', swapType: 'EXACT_OUTPUT' }, validSignature), /invoice amount/);
 });

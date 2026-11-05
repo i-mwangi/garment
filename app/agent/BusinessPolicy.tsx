@@ -28,7 +28,7 @@ function PolicyEditor({ policy }: { policy: BusinessPolicy }) {
       }, expectedRevision: policy.revision });
       await client.invalidateQueries({ queryKey: ["business-policy"] });
       await client.invalidateQueries({ queryKey: ["finance-automation"] });
-      setMessage("Policy saved. Finance worker submissions now follow these treasury limits; other autonomous workflows are still in development.");
+      setMessage("Policy saved. Finance worker submissions follow the treasury limits. NEAR AI Cloud calls, when configured, reserve against the daily inference limit.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Policy could not be saved"); }
     finally { setSaving(false); }
   }
@@ -52,7 +52,7 @@ export default function BusinessPolicyControls() {
   const query = useQuery({ queryKey: ["business-policy"], queryFn: () => workspaceFetch<PolicyResponse>("/api/business-policy"), retry: false });
   return <section className="rounded-2xl border border-primary-divider bg-background p-5 space-y-3">
     <h2 className="text-lg font-semibold">Autonomous business policy</h2>
-    <p className="text-sm text-text-secondary">The policy starts stopped with zero spending limits. It gates finance worker submissions but does not start the worker or replace the native vault rules. Draft and inference controls are reserved for later workflows.</p>
+    <p className="text-sm text-text-secondary">The policy starts stopped with zero spending limits. It gates finance worker payments and configured NEAR AI Cloud calls, but does not start the worker or replace native vault rules. Automatic drafts remain disabled until a worker uses them.</p>
     {query.isLoading && <p role="status" className="text-sm text-text-secondary">Loading policy…</p>}
     {query.error && <p role="alert" className="text-sm text-red-600">{query.error.message}</p>}
     {query.data && <PolicyEditor key={query.data.policy.revision} policy={query.data.policy} />}

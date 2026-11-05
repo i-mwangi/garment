@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentChatRepository, validateChatInput, answerFinanceMessage, paymentPlanId, financeMessageContext } from '../services/server/agent-chat.ts';
+import { BusinessPolicyStore } from '../services/server/business-policy.ts';
 
 const input=validateChatInput({requestId:'11111111-1111-4111-a111-111111111111',message:'Help me review bills',throughDate:'2026-11-12',reserveUsdc:'0'});
 const run={id:input.requestId,companyId:'a',requestedBy:'owner',request:input,balanceUsdc:'10',obligationsUsdc:'1',reserveUsdc:'0',unallocatedUsdc:'9',actions:[]};
@@ -61,4 +62,41 @@ test('Azure conversation receives bounded financial context and exposes no payme
     process.env.AZURE_OPENAI_ENDPOINT='https://attacker.invalid';
     await assert.rejects(answerFinanceMessage('hi',[],run,async()=>{throw new Error('must not call');}),/Azure HTTPS/);
   } finally {for(const key of keys)if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}
+});
+
+test('NEAR AI chat uses the owner budget and keeps the same operation review boundary', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'near-ai-chat-'));
+  const keys = ['SETTLBOX_AI_PROVIDER', 'SETTLBOX_BUSINESS_DATABASE', 'NEAR_AI_API_KEY', 'NEAR_AI_MODEL'];
+  const before = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  process.env.SETTLBOX_AI_PROVIDER = 'near_ai';
+  process.env.SETTLBOX_BUSINESS_DATABASE = join(dir, 'business.sqlite');
+  process.env.NEAR_AI_API_KEY = 'test-only-api-key';
+  process.env.NEAR_AI_MODEL = 'zai-org/GLM-5.1-FP8';
+  const policy = new BusinessPolicyStore(process.env.SETTLBOX_BUSINESS_DATABASE);
+  try {
+    policy.update('a', { stopped: false, allowAutonomousDrafts: true, allowAutonomousPayments: false,
+      maxSinglePaymentUsdc: '0', maxDailyTreasuryUsdc: '0', maxDailyInferenceUsd: '1' }, 0, 'owner');
+    const calls = [];
+    const transport = async (url, options) => {
+      calls.push(String(url));
+      if (String(url).endsWith('/models')) return Response.json({ data: [{ id: process.env.NEAR_AI_MODEL,
+        context_length: 100000, max_output_length: 5000, pricing: { prompt: '0.000001', completion: '0.000005' } }] });
+      const body = JSON.parse(options.body);
+      assert.equal(body.store, false);
+      assert.match(body.instructions, /cannot mutate/);
+      return Response.json({ id: 'response-1', model: process.env.NEAR_AI_MODEL, status: 'completed',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify({ answer: 'Review the bill first.', recordIds: [], operation: null }) }] }],
+        usage: { input_tokens: 100, output_tokens: 30 } });
+    };
+    const answer = await answerFinanceMessage('What needs my attention?', [], run, transport);
+    assert.equal(answer.answer, 'Review the bill first.');
+    assert.equal(answer.operation, undefined);
+    assert.equal(policy.inferenceCharges('a').length, 1);
+    await assert.rejects(() => answerFinanceMessage('What needs my attention?', [], run, transport), /already reserved/);
+    assert.equal(calls.filter(url => url.endsWith('/responses')).length, 1);
+  } finally {
+    policy.close();
+    for (const key of keys) if (before[key] === undefined) delete process.env[key]; else process.env[key] = before[key];
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
