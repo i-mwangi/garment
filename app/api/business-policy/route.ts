@@ -12,7 +12,9 @@ export async function GET(request: Request) {
     const store = openBusinessPolicy();
     try {
       const company = readNearTreasuryIdentity().companyId;
-      return Response.json({ policy: store.get(company), events: store.events(company) }, { headers });
+      return Response.json({ policy: store.get(company), events: store.events(company),
+        providerOverride: process.env.SETTLBOX_AI_PROVIDER || "disabled",
+        nearAiConfigured: Boolean(process.env.NEAR_AI_API_KEY && process.env.NEAR_AI_MODEL) }, { headers });
     } finally { store.close(); }
   } catch { return Response.json({ error: "Workspace authorization or policy storage is unavailable" }, { status: 401, headers }); }
 }
@@ -26,6 +28,8 @@ export async function POST(request: Request) {
     if (raw.length > 5000) throw new Error("Policy request is too large");
     const input = JSON.parse(raw) as { policy?: unknown; expectedRevision?: unknown };
     if (!input || typeof input !== "object" || !Number.isSafeInteger(input.expectedRevision)) throw new Error("Current policy revision is required");
+    if (input.policy && typeof input.policy === "object" && "aiProvider" in input.policy && input.policy.aiProvider === "near_ai" &&
+      (!process.env.NEAR_AI_API_KEY || !process.env.NEAR_AI_MODEL)) throw new Error("NEAR AI Cloud key and model must be configured before selection");
     const store = openBusinessPolicy();
     try {
       return Response.json({ policy: store.update(readNearTreasuryIdentity().companyId, input.policy, Number(input.expectedRevision), principal.id) }, { headers });

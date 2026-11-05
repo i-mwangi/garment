@@ -54,15 +54,26 @@ test('tracks pending, refund and failure without booking a sale', () => {
     quoteResponse: { ...quote, quoteRequest: { ...request, recipient: 'other.near' } }, status: 'SUCCESS' }, order, validSignature), /changed/);
 });
 
+test('provider refund details remain candidates until a Base receipt proves the transfer', () => {
+  const order = acceptOneClickQuote(quote, expected, validSignature);
+  const hash = `0x${'1'.repeat(64)}`;
+  const status = readOneClickStatus({ correlationId: order.correlationId, quoteResponse: quote, status: 'REFUNDED',
+    swapDetails: { refundedAmount: '1000', originChainTxHashes: [{ hash }] } }, order, validSignature);
+  assert.deepEqual(status.refund, { amountUnits: '1000', hashes: [hash] });
+  assert.equal(status.progress, 'refunded');
+});
+
 test('exact-output checkout fixes the invoice amount and preserves quoted Base input', () => {
   const checkoutRequest = { ...request, swapType: 'EXACT_OUTPUT', amount: '1000000' };
   const checkout = { ...quote, quoteRequest: checkoutRequest,
-    quote: { ...quote.quote, amountIn: '1010000', amountOut: '1000000', minAmountOut: '1000000' } };
+    quote: { ...quote.quote, amountIn: '1010000', minAmountIn: '1000000', amountOut: '1000000', minAmountOut: '1000000' } };
   const order = acceptOneClickQuote(checkout, { ...expected, inputUnits: '1000000',
     minimumOutputUnits: '1000000', swapType: 'EXACT_OUTPUT' }, validSignature);
   assert.equal(order.inputUnits, '1010000');
   assert.equal(order.requestAmountUnits, '1000000');
   assert.equal(order.swapType, 'EXACT_OUTPUT');
+  const compact = { ...checkout, quote: { amountIn: '1010000', minAmountIn: '1000000', depositAddress: quote.quote.depositAddress, deadline: quote.quote.deadline } };
+  assert.equal(acceptOneClickQuote(compact, { ...expected, inputUnits: '1000000', minimumOutputUnits: '1000000', swapType: 'EXACT_OUTPUT' }, validSignature).inputUnits, '1010000');
   assert.equal(readOneClickStatus({ correlationId: order.correlationId, quoteResponse: checkout, status: 'PENDING_DEPOSIT' }, order, validSignature).progress, 'awaiting_deposit');
   assert.throws(() => acceptOneClickQuote({ ...checkout, quote: { ...checkout.quote, amountOut: '999999', minAmountOut: '999999' } },
     { ...expected, minimumOutputUnits: '999999', swapType: 'EXACT_OUTPUT' }, validSignature), /invoice amount/);

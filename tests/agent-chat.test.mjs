@@ -68,13 +68,13 @@ test('NEAR AI chat uses the owner budget and keeps the same operation review bou
   const dir = mkdtempSync(join(tmpdir(), 'near-ai-chat-'));
   const keys = ['SETTLBOX_AI_PROVIDER', 'SETTLBOX_BUSINESS_DATABASE', 'NEAR_AI_API_KEY', 'NEAR_AI_MODEL'];
   const before = Object.fromEntries(keys.map(key => [key, process.env[key]]));
-  process.env.SETTLBOX_AI_PROVIDER = 'near_ai';
+  process.env.SETTLBOX_AI_PROVIDER = 'policy';
   process.env.SETTLBOX_BUSINESS_DATABASE = join(dir, 'business.sqlite');
   process.env.NEAR_AI_API_KEY = 'test-only-api-key';
   process.env.NEAR_AI_MODEL = 'zai-org/GLM-5.1-FP8';
   const policy = new BusinessPolicyStore(process.env.SETTLBOX_BUSINESS_DATABASE);
   try {
-    policy.update('a', { stopped: false, allowAutonomousDrafts: true, allowAutonomousPayments: false,
+    policy.update('a', { aiProvider: 'near_ai', stopped: false, allowAutonomousDrafts: true, allowAutonomousPayments: false,
       maxSinglePaymentUsdc: '0', maxDailyTreasuryUsdc: '0', maxDailyInferenceUsd: '1' }, 0, 'owner');
     const calls = [];
     const transport = async (url, options) => {

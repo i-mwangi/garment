@@ -10,7 +10,7 @@ const tokens = [
 ];
 const json = value => new Response(JSON.stringify(value), { status: 200 });
 
-test('Base USDC quote keeps exact terms, verifies before exposing deposit instructions and polls with memo', async () => {
+test('Base USDC quote keeps exact terms, verifies before exposing deposit instructions and polls status', async () => {
   const calls = [];
   const deadline = new Date(Date.now() + 180000).toISOString();
   const quoteDeadline = new Date(Date.now() + 120000).toISOString();
@@ -23,7 +23,7 @@ test('Base USDC quote keeps exact terms, verifies before exposing deposit instru
     if (url.endsWith('/quote')) {
       const quoteRequest = JSON.parse(options.body);
       signed = { correlationId: 'corr-1', quoteRequest, quote: { amountOut: '995000', minAmountOut: '990000',
-        depositAddress: '0x2222222222222222222222222222222222222222', depositMemo: 'memo-1', deadline: quoteDeadline } };
+        depositAddress: '0x2222222222222222222222222222222222222222', deadline: quoteDeadline } };
       return json(signed);
     }
     if (url.includes('/status?')) return json({ correlationId: 'corr-1', quoteResponse: signed, status: 'SUCCESS',
@@ -34,12 +34,12 @@ test('Base USDC quote keeps exact terms, verifies before exposing deposit instru
   await assert.rejects(() => client.quote(input), /signature/);
   const order = await client.quote(input, () => true);
   assert.equal(order.originAsset, origin);
-  assert.equal(order.depositMemo, 'memo-1');
-  assert.equal(calls[1].options.headers['X-API-Key'], 'a'.repeat(20));
+  assert.equal(order.depositMemo, null);
+  assert.equal(calls[1].options.headers.Authorization, `Bearer ${'a'.repeat(20)}`);
   assert.equal(calls[1].url, 'https://1click.chaindefuser.com/v0/quote');
   const status = await client.status(order, () => true);
   assert.equal(status.progress, 'provider_success_unverified');
-  assert.match(calls.at(-1).url, /depositMemo=memo-1/);
+  assert.doesNotMatch(calls.at(-1).url, /depositMemo/);
   await assert.rejects(() => client.submitDepositHash(order, 'not-a-hash'), /Base transaction hash/);
 });
 
@@ -51,4 +51,22 @@ test('token discovery rejects lookalikes and unsupported destination', async () 
   await assert.rejects(() => client.supportedBaseUsdcAsset(), /Official Base USDC/);
   const other = new OneClickClient('a'.repeat(20), async () => json(tokens.slice(0, 1)));
   await assert.rejects(() => other.supportedBaseUsdcAsset(), /Native NEAR USDC/);
+});
+
+test('exact-output Base quote uses the invoice amount and returns a bounded input', async () => {
+  const deadline = new Date(Date.now() + 180000).toISOString();
+  const transport = async (url, options) => {
+    if (url.endsWith('/tokens')) return json(tokens);
+    const quoteRequest = JSON.parse(options.body);
+    assert.equal(quoteRequest.swapType, 'EXACT_OUTPUT');
+    assert.equal(quoteRequest.amount, '1000000');
+    return json({ correlationId: 'corr-exact', quoteRequest, quote: { amountIn: '1010000', minAmountIn: '1000000',
+      depositAddress: '0x2222222222222222222222222222222222222222', deadline } });
+  };
+  const client = new OneClickClient('a'.repeat(20), transport);
+  const order = await client.quote({ id: 'sale-1', companyId: 'company-1', amountUnits: '1000000', minimumOutputUnits: '1000000',
+    recipient: 'merchant.near', refundTo: '0x1111111111111111111111111111111111111111', deadline,
+    slippageBps: 100, swapType: 'EXACT_OUTPUT' }, () => true);
+  assert.equal(order.inputUnits, '1010000');
+  assert.equal(order.minimumOutputUnits, '1000000');
 });

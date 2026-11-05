@@ -79,11 +79,18 @@ export function acceptOneClickQuote(input: unknown, expected: {
   const requestDeadline = date(request.deadline, "request deadline");
   const now = expected.now ?? new Date();
   if (Date.parse(deadline) <= now.getTime() || Date.parse(requestDeadline) <= now.getTime() || Date.parse(deadline) > Date.parse(requestDeadline)) throw new Error("1Click quote is expired or extends the requested deadline");
-  const amountOut = units(quote.amountOut, "quoted output");
-  const minAmountOut = units(quote.minAmountOut, "minimum quoted output");
-  if (BigInt(amountOut) < BigInt(minAmountOut) || BigInt(minAmountOut) < BigInt(minimumOutputUnits)) throw new Error("1Click quote does not meet the required USDC output");
-  if (swapType === "EXACT_OUTPUT" && BigInt(amountOut) !== BigInt(inputUnits)) throw new Error("1Click exact-output quote changed the requested invoice amount");
-  const quotedInputUnits = swapType === "EXACT_OUTPUT" ? units(quote.amountIn, "quoted Base USDC input") : inputUnits;
+  let quotedInputUnits = inputUnits;
+  if (swapType === "EXACT_OUTPUT") {
+    if (inputUnits !== minimumOutputUnits || (quote.amountOut !== undefined && units(quote.amountOut, "quoted output") !== inputUnits) ||
+      (quote.minAmountOut !== undefined && BigInt(units(quote.minAmountOut, "minimum quoted output")) < BigInt(inputUnits)))
+      throw new Error("1Click exact-output quote changed the requested invoice amount");
+    quotedInputUnits = units(quote.amountIn, "quoted Base USDC input");
+    if (BigInt(units(quote.minAmountIn, "minimum Base USDC input")) > BigInt(quotedInputUnits)) throw new Error("1Click quote changed the Base USDC input range");
+  } else {
+    const amountOut = units(quote.amountOut, "quoted output");
+    const minAmountOut = units(quote.minAmountOut, "minimum quoted output");
+    if (BigInt(amountOut) < BigInt(minAmountOut) || BigInt(minAmountOut) < BigInt(minimumOutputUnits)) throw new Error("1Click quote does not meet the required USDC output");
+  }
   const depositAddress = string(quote.depositAddress, "deposit address", 180);
   const depositMemo = quote.depositMemo === undefined || quote.depositMemo === null ? null : string(quote.depositMemo, "deposit memo", 180);
   const correlationId = string(response.correlationId, "correlation ID", 120);
@@ -91,7 +98,7 @@ export function acceptOneClickQuote(input: unknown, expected: {
     inputUnits: quotedInputUnits, requestAmountUnits: inputUnits, swapType, minimumOutputUnits, recipient, refundTo, deadline, depositAddress, depositMemo, correlationId, signedQuote: input };
 }
 
-export function readOneClickStatus(input: unknown, order: OneClickOrder, verifySignature: (signedQuote: unknown) => boolean = verifiedQuote): { progress: OneClickProgress; amountOutUnits: string | null; destinationHashes: string[] } {
+export function readOneClickStatus(input: unknown, order: OneClickOrder, verifySignature: (signedQuote: unknown) => boolean = verifiedQuote): { progress: OneClickProgress; amountOutUnits: string | null; destinationHashes: string[]; refund?: { amountUnits: string; hashes: string[] } } {
   const response = object(input, "status response");
   if (response.correlationId !== order.correlationId) throw new Error("1Click status belongs to another quote");
   const signed = object(response.quoteResponse, "status quote");
@@ -113,5 +120,8 @@ export function readOneClickStatus(input: unknown, order: OneClickOrder, verifyS
   const amountOutUnits = typeof details.amountOut === "string" && /^\d+$/.test(details.amountOut) ? details.amountOut : null;
   const destinationHashes = Array.isArray(details.destinationChainTxHashes) ? details.destinationChainTxHashes.filter((row): row is { hash: string } => !!row && typeof row === "object" && typeof row.hash === "string" && !!row.hash).map(row => row.hash) : [];
   if (progress === "provider_success_unverified" && (!amountOutUnits || BigInt(amountOutUnits) < BigInt(order.minimumOutputUnits) || !destinationHashes.length)) throw new Error("1Click success lacks sufficient destination proof; keep the order unresolved");
-  return { progress, amountOutUnits, destinationHashes };
+  const refund = progress === "refunded" && typeof details.refundedAmount === "string" && /^[1-9]\d{0,77}$/.test(details.refundedAmount) && Array.isArray(details.originChainTxHashes)
+    ? { amountUnits: details.refundedAmount, hashes: details.originChainTxHashes.filter((row): row is { hash: string } => !!row && typeof row === "object" && typeof row.hash === "string" && /^0x[a-fA-F0-9]{64}$/.test(row.hash)).map(row => row.hash) }
+    : undefined;
+  return { progress, amountOutUnits, destinationHashes, ...(refund ? { refund } : {}) };
 }

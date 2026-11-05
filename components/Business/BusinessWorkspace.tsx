@@ -16,6 +16,7 @@ import { useAuth } from "@/services/auth/context";
 import { Badge, BadgeStatus } from "@/components/Common/Badge";
 import { TabContainer } from "@/components/Common/TabContainer";
 import { BusinessRecordPresentation } from "./BusinessRecordPresentation";
+import { ProcurementQuoteComparison } from "./ProcurementQuoteComparison";
 async function request<T>(path: string, method = "GET", body?: unknown, requestId?: string): Promise<T> {
     const response = await fetch(path, {
         method,
@@ -192,6 +193,7 @@ export function BusinessWorkspace({ kind, initialCreate = false, recordId, initi
               Print / Save PDF
             </a>)}
           {selected && <BusinessRecordPresentation record={selected}/>}
+          {selected?.kind === "bill" && <ProcurementQuoteComparison record={selected} role={user?.role}/>}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
                 {

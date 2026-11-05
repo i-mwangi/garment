@@ -10,6 +10,7 @@ import { MODAL_IDS } from "@/presentation/types/modal";
 import { useModal } from "@/presentation/contexts/ModalManagerProvider";
 import { importAndGetAccount } from "@/presentation/services/unsupported/account";
 import { PaymentLinkPreview } from "@/presentation/components/PaymentLink/PaymentLinkPreview";
+import BaseUsdcCheckout from "@/presentation/components/PaymentLink/BaseUsdcCheckout";
 import { useNearPayment } from "@/presentation/contexts/NearPaymentProvider";
 const useWallet = () => ({ address: null as string | null, connected: false, disconnect: async () => { }, requestSend: null as any, wallet: null });
 class SendTransaction {
@@ -132,7 +133,7 @@ const PaymentLinkDetailPage = () => {
     return (<div className="flex flex-col w-full h-full bg-app-background p-2">
       <Header />
 
-      <div className="flex flex-col w-full h-screen p-4 items-center justify-start gap-10 bg-background rounded-lg">
+      <div className="flex flex-col w-full h-screen overflow-y-auto p-4 items-center justify-start gap-10 bg-background rounded-lg">
             
             <div className="w-full flex flex-row gap-2 px-7 items-center justify-start">
               <img src="/misc/star-icon.svg" alt="Payment Link"/>
@@ -151,6 +152,7 @@ const PaymentLinkDetailPage = () => {
                     amount: "0",
                 }
                 : null} handleConnectWallet={() => { void wallet.connect().catch(error => toast.error(error instanceof Error ? error.message : "Wallet connection failed")); }} handleSubmitPayment={handleSubmitPayment} isSending={isSending}/>
+              <BaseUsdcCheckout code={code} />
             </div>
       </div>
     </div>);

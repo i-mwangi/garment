@@ -111,6 +111,30 @@ export class PaymentLinkRepository {
     } catch (error) { this.database.exec("ROLLBACK"); throw error; }
   }
 
+  recordVerifiedIntent(code: string, orderId: string, hash: string): BusinessPaymentLink {
+    if (!isNearTransactionHash(hash) || !orderId.startsWith(`${code}:`)) throw new Error("Intents order identity is invalid");
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const evidence = this.database.prepare("SELECT v.amount_units,v.recipient,o.record FROM intent_verified_destinations v JOIN intent_orders o ON o.company_id=v.company_id AND o.order_id=v.order_id WHERE v.order_id=? AND v.transaction_hash=?").get(orderId, hash);
+      const saved = evidence ? JSON.parse(String(evidence.record)) as { order?: { refundTo?: string; recipient?: string; minimumOutputUnits?: string; destinationAsset?: string } } : undefined;
+      const link = this.get(code);
+      if (!evidence || !saved?.order || !link || link.acceptedChains[0]?.networkId !== "mainnet" ||
+        evidence.recipient !== link.paymentWalletAddress || saved.order.recipient !== link.paymentWalletAddress ||
+        saved.order.minimumOutputUnits !== parseAmount(link.amount).toString() ||
+        saved.order.destinationAsset !== `nep141:${link.acceptedTokens[0]?.address}` ||
+        BigInt(String(evidence.amount_units)) < parseAmount(link.amount) ||
+        typeof saved.order.refundTo !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(saved.order.refundTo)) throw new Error("Verified Intents settlement does not match this payment link");
+      const previous = this.database.prepare("SELECT code FROM business_link_payments WHERE hash=?").get(hash);
+      if (previous) {
+        if (previous.code !== code) throw new Error("Transaction already belongs to another payment link");
+        this.database.exec("COMMIT"); return link;
+      }
+      if (link.status !== "ACTIVE") throw new Error("Payment link is inactive");
+      this.database.prepare("INSERT INTO business_link_payments(code,hash,payer,created_at) VALUES(?,?,?,?)").run(code, hash, `base:${saved.order.refundTo.toLowerCase()}`, new Date().toISOString());
+      this.database.exec("COMMIT"); return this.get(code)!;
+    } catch (error) { this.database.exec("ROLLBACK"); throw error; }
+  }
+
   close() { this.database.close(); }
 
   private isInvoiceLink(code: string): boolean {

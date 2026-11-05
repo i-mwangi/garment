@@ -39,11 +39,17 @@ test('quote identity and provider progress persist once without becoming verifie
     const proof = { transactionHash: proofHash, amountUnits: '990', recipient: 'merchant.near' };
     const recorded = first.recordVerifiedDestination('company-1', 'sale-3', proof);
     assert.equal(recorded.verifiedDestination.transactionHash, proofHash);
+    assert.deepEqual(first.timeline('company-1', 'sale-3').map(event => event.status), ['awaiting_deposit', 'provider_success_unverified', 'confirmed']);
     assert.deepEqual(second.recordVerifiedDestination('company-1', 'sale-3', proof), recorded);
     assert.throws(() => first.recordVerifiedDestination('company-1', 'sale-3', { ...proof, amountUnits: '991' }), /different destination proof/);
     first.create({ ...another, id: 'sale-4', correlationId: 'corr-4', depositAddress: 'third.near' });
     first.update('company-1', 'sale-4', realSuccess);
     assert.throws(() => first.recordVerifiedDestination('company-1', 'sale-4', proof), /UNIQUE/);
-    assert.throws(() => first.update('company-1', 'sale-1', { progress: 'refunded', amountOutUnits: null, destinationHashes: [] }), /terminal/);
+    assert.equal(first.update('company-1', 'sale-1', { progress: 'refunded', amountOutUnits: null, destinationHashes: [] }).progress, 'refunded');
+    const refundProof = { transactionHash: `0x${'1'.repeat(64)}`, amountUnits: '1000' };
+    assert.equal(first.recordVerifiedRefund('company-1', 'sale-1', refundProof).verifiedRefund.transactionHash, refundProof.transactionHash);
+    assert.deepEqual(first.timeline('company-1', 'sale-1').map(event => event.status), ['awaiting_deposit', 'deposit_seen', 'provider_success_unverified', 'refunded', 'refund_verified']);
+    assert.throws(() => first.update('company-1', 'sale-1', { progress: 'processing', amountOutUnits: null, destinationHashes: [] }), /later/);
+    assert.throws(() => first.update('company-1', 'sale-3', { progress: 'refunded', amountOutUnits: null, destinationHashes: [] }), /later or terminal|cannot replace/);
   } finally { first.close(); second.close(); rmSync(directory, { recursive: true, force: true }); }
 });

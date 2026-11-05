@@ -4,8 +4,8 @@ import { acceptOneClickQuote, mainnetUsdcAsset, readOneClickStatus, type OneClic
 const BASE = "https://1click.chaindefuser.com/v0";
 const BASE_USDC = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
 
-function apiKey(value: string): string {
-  if (!value || value.length < 16 || /[\s\r\n]/.test(value)) throw new Error("1Click API key is unavailable");
+function jwt(value: string): string {
+  if (!value || value.length < 16 || /[\s\r\n]/.test(value)) throw new Error("1Click JWT is unavailable");
   return value;
 }
 function object(value: unknown): Record<string, unknown> {
@@ -22,12 +22,12 @@ function baseAddress(value: string): string {
 }
 
 export class OneClickClient {
-  private readonly key: string;
+  private readonly token: string;
   private readonly transport: typeof fetch;
-  constructor(key: string, transport: typeof fetch = fetch) { this.key = apiKey(key); this.transport = transport; }
+  constructor(token: string, transport: typeof fetch = fetch) { this.token = jwt(token); this.transport = transport; }
   private async request(path: string, method = "GET", body?: unknown): Promise<unknown> {
     const response = await this.transport(`${BASE}${path}`, {
-      method, headers: { "X-API-Key": this.key, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      method, headers: { "Authorization": `Bearer ${this.token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       cache: "no-store", signal: AbortSignal.timeout(20000),
     });
@@ -66,6 +66,7 @@ export class OneClickClient {
     const response = await this.request("/quote", "POST", request);
     const quote = acceptOneClickQuote(response, { id: input.id, companyId: input.companyId, originAsset,
       inputUnits: amountUnits, recipient, refundTo, minimumOutputUnits, swapType, now: new Date() }, verifySignature);
+    if (quote.depositMemo !== null) throw new Error("Base USDC checkout cannot use a deposit memo");
     const returned = object(object(response).quoteRequest);
     if (returned.deadline !== input.deadline || returned.slippageTolerance !== input.slippageBps) throw new Error("1Click quote changed the requested deadline or slippage");
     return quote;

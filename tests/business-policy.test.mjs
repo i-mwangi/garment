@@ -18,10 +18,13 @@ test('policy starts stopped and rejects spending until an owner changes it', () 
   const store = new BusinessPolicyStore(':memory:');
   try {
     assert.equal(store.get('company-a').stopped, true);
+    assert.equal(store.get('company-a').aiProvider, 'azure');
     assert.equal(store.get('company-a').maxDailyTreasuryUsdc, '0');
     assert.throws(() => store.reserve('company-a', 'payment-1', 'treasury', '1', 1), /stopped or changed/);
     assert.throws(() => store.update('company-a', { ...enabled, maxSinglePaymentUsdc: '6' }, 0, 'owner'), /exceeds/);
     assert.throws(() => store.update('company-a', { ...enabled, extra: true }, 0, 'owner'), /Complete/);
+    assert.throws(() => store.update('company-a', { ...enabled, aiProvider: 'unknown' }, 0, 'owner'), /AI provider/);
+    assert.equal(store.update('company-a', { ...enabled, aiProvider: 'near_ai' }, 0, 'owner').aiProvider, 'near_ai');
   } finally { store.close(); }
 });
 

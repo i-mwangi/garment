@@ -5,6 +5,7 @@ import { requireOperatorSession, requireSameOrigin } from "@/services/server/ope
 import { openFinanceWorker, runFinanceWorker } from "@/services/server/finance-worker";
 import { openBusinessPolicy } from "@/services/server/business-policy";
 import { runSalesReconciliation } from "@/services/server/sales-worker";
+import { runIntentsReconciliation } from "@/services/server/intents-worker";
 export const runtime = "nodejs";
 const headers = { "Cache-Control": "no-store" };
 function workerAuthorized(request: Request) {
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
   }
   try {
     const { action, settings } = await request.json(); const company = readNearTreasuryIdentity().companyId;
-    if (action === "tick") { const [sales,finance,notifications]=await Promise.allSettled([Promise.resolve().then(() => runSalesReconciliation(company)),runFinanceWorker(company),runSlackNotifications(company)]); if(finance.status==="rejected")throw finance.reason; return Response.json({...finance.value,sales:sales.status==="fulfilled"?sales.value:{error:"Sales reconciliation failed; retry on the next cycle"},notifications:notifications.status==="fulfilled"?notifications.value:{error:"Notification cycle failed; check delivery audit"}}, { headers }); }
+    if (action === "tick") { const [sales,intents,finance,notifications]=await Promise.allSettled([Promise.resolve().then(() => runSalesReconciliation(company)),runIntentsReconciliation(company),runFinanceWorker(company),runSlackNotifications(company)]); if(finance.status==="rejected")throw finance.reason; return Response.json({...finance.value,sales:sales.status==="fulfilled"?sales.value:{error:"Sales reconciliation failed; retry on the next cycle"},intents:intents.status==="fulfilled"?intents.value:{error:"Intents reconciliation failed; retry on the next cycle"},notifications:notifications.status==="fulfilled"?notifications.value:{error:"Notification cycle failed; check delivery audit"}}, { headers }); }
     if (action !== "configure" || worker) return Response.json({ error: "Only the company owner can change automation settings" }, { status: 403, headers });
     const store = openFinanceWorker();
     try { return Response.json(store.configure(company, settings, actor), { headers }); } finally { store.close(); }

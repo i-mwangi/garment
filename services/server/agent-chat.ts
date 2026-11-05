@@ -74,7 +74,12 @@ export function financeMessageContext(message: string, history: AgentChatTurn[],
   return { workspace: selected, operations: agentToolCatalog.filter(tool => domains.has(tool.name.split(".")[0])) };
 }
 export async function answerFinanceMessage(message: string, history: AgentChatTurn[], run: AgentRun, transport: typeof fetch = fetch, workspace: Record<string, unknown> = {}) {
-  const provider = process.env.SETTLBOX_AI_PROVIDER;
+  let provider = process.env.SETTLBOX_AI_PROVIDER;
+  if (provider === "policy") {
+    const policy = openBusinessPolicy();
+    try { provider = policy.get(run.companyId).aiProvider; }
+    finally { policy.close(); }
+  }
   if (provider !== "azure" && provider !== "near_ai") return { operation: undefined, answer: run.planningUnavailableReason ? `${run.planningUnavailableReason} Conversational AI needs a configured provider; no payment has been sent.` : `Your treasury has ${run.balanceUsdc} USDC, with ${run.obligationsUsdc} USDC in obligations through ${run.request.throughDate}. Review the saved items below. Conversational AI needs a configured provider; no payment has been sent.`, recordIds: run.planningUnavailableReason ? [] : run.actions.slice(0, 10).map(action => action.recordId) };
   const selected = financeMessageContext(message, history, workspace);
   const supportedOperations = run.planningUnavailableReason ? selected.operations.filter(tool => withoutVaultTools.has(tool.name)) : selected.operations;

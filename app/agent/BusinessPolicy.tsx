@@ -6,9 +6,9 @@ import { workspaceFetch } from "@/presentation/services/api/seeded-workspace";
 import FinanceButton from "@/presentation/components/Common/FinanceButton";
 import type { BusinessPolicy } from "@/services/server/business-policy";
 
-type PolicyResponse = { policy: BusinessPolicy; events: { actor: string; event: string; revision: number; created_at: string }[] };
+type PolicyResponse = { policy: BusinessPolicy; events: { actor: string; event: string; revision: number; created_at: string }[]; providerOverride: string; nearAiConfigured: boolean };
 
-function PolicyEditor({ policy }: { policy: BusinessPolicy }) {
+function PolicyEditor({ policy, nearAiConfigured, providerOverride }: { policy: BusinessPolicy; nearAiConfigured: boolean; providerOverride: string }) {
   const client = useQueryClient();
   const [draft, setDraft] = useState(policy);
   const [saving, setSaving] = useState(false);
@@ -25,6 +25,7 @@ function PolicyEditor({ policy }: { policy: BusinessPolicy }) {
         maxSinglePaymentUsdc: draft.maxSinglePaymentUsdc,
         maxDailyTreasuryUsdc: draft.maxDailyTreasuryUsdc,
         maxDailyInferenceUsd: draft.maxDailyInferenceUsd,
+        aiProvider: draft.aiProvider,
       }, expectedRevision: policy.revision });
       await client.invalidateQueries({ queryKey: ["business-policy"] });
       await client.invalidateQueries({ queryKey: ["finance-automation"] });
@@ -43,6 +44,12 @@ function PolicyEditor({ policy }: { policy: BusinessPolicy }) {
       {amount("maxDailyTreasuryUsdc", "Daily treasury limit (USDC, UTC)")}
       {amount("maxDailyInferenceUsd", "Daily inference limit (USD, UTC)")}
     </div>
+    <label className="flex max-w-sm flex-col gap-1 text-sm">Finance agent AI provider
+      <select className="rounded-lg border border-primary-divider bg-background p-2" value={draft.aiProvider} onChange={event => setDraft(value => ({ ...value, aiProvider: event.target.value as BusinessPolicy["aiProvider"] }))}>
+        <option value="azure">Azure AI</option><option value="near_ai" disabled={!nearAiConfigured}>NEAR AI Cloud{nearAiConfigured ? "" : " · configure key and model first"}</option>
+      </select>
+    </label>
+    {providerOverride !== "policy" && <p className="text-xs text-text-secondary">The server provider setting currently overrides this selection. Set SETTLBOX_AI_PROVIDER=policy to use the owner choice.</p>}
     <div className="flex items-center gap-3"><FinanceButton disabled={saving} onClick={() => void save()} className="rounded-lg border border-primary-divider px-4 py-2 text-sm disabled:opacity-50">{saving ? "Saving…" : "Save business policy"}</FinanceButton><span className="text-xs text-text-secondary">Version {policy.revision}</span></div>
     {message && <p role="status" className="text-sm text-text-secondary">{message}</p>}
   </div>;
@@ -55,7 +62,7 @@ export default function BusinessPolicyControls() {
     <p className="text-sm text-text-secondary">The policy starts stopped with zero spending limits. It gates finance worker payments and configured NEAR AI Cloud calls, but does not start the worker or replace native vault rules. Automatic drafts remain disabled until a worker uses them.</p>
     {query.isLoading && <p role="status" className="text-sm text-text-secondary">Loading policy…</p>}
     {query.error && <p role="alert" className="text-sm text-red-600">{query.error.message}</p>}
-    {query.data && <PolicyEditor key={query.data.policy.revision} policy={query.data.policy} />}
+    {query.data && <PolicyEditor key={query.data.policy.revision} policy={query.data.policy} nearAiConfigured={query.data.nearAiConfigured} providerOverride={query.data.providerOverride} />}
     {!!query.data?.events.length && <details><summary className="cursor-pointer text-sm">Policy changes</summary><ul className="mt-2 space-y-1 text-xs text-text-secondary">{query.data.events.map((item, index) => <li key={`${item.revision}-${index}`}>{item.created_at} · Version {item.revision} · {item.event}</li>)}</ul></details>}
   </section>;
 }

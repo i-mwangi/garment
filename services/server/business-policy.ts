@@ -5,6 +5,7 @@ import { parseAmount } from "../near/amount.ts";
 
 export type BusinessBudgetKind = "treasury" | "inference";
 export interface BusinessPolicy {
+  aiProvider: "azure" | "near_ai";
   stopped: boolean;
   allowAutonomousDrafts: boolean;
   allowAutonomousPayments: boolean;
@@ -15,6 +16,7 @@ export interface BusinessPolicy {
 }
 
 const initialPolicy: BusinessPolicy = {
+  aiProvider: "azure",
   stopped: true,
   allowAutonomousDrafts: false,
   allowAutonomousPayments: false,
@@ -34,13 +36,15 @@ export function validateBusinessPolicy(value: unknown): Omit<BusinessPolicy, "re
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Business policy is required");
   const input = value as Record<string, unknown>;
   const fields = ["stopped", "allowAutonomousDrafts", "allowAutonomousPayments", "maxSinglePaymentUsdc", "maxDailyTreasuryUsdc", "maxDailyInferenceUsd"];
-  if (Object.keys(input).length !== fields.length || Object.keys(input).some(key => !fields.includes(key))) throw new Error("Complete business policy settings are required");
+  if (Object.keys(input).length < fields.length || Object.keys(input).length > fields.length + 1 || Object.keys(input).some(key => ![...fields, "aiProvider"].includes(key)) || fields.some(key => !(key in input))) throw new Error("Complete business policy settings are required");
+  if (input.aiProvider !== undefined && input.aiProvider !== "azure" && input.aiProvider !== "near_ai") throw new Error("Unsupported AI provider");
   for (const key of fields.slice(0, 3)) if (typeof input[key] !== "boolean") throw new Error(`${key} must be a boolean`);
   const single = amount(input.maxSinglePaymentUsdc, "Single payment limit");
   const treasury = amount(input.maxDailyTreasuryUsdc, "Daily treasury limit");
   const inference = amount(input.maxDailyInferenceUsd, "Daily inference limit");
   if (parseAmount(single, 6) > parseAmount(treasury, 6)) throw new Error("Single payment limit exceeds the daily treasury limit");
   return {
+    aiProvider: (input.aiProvider as BusinessPolicy["aiProvider"] | undefined) ?? "azure",
     stopped: input.stopped as boolean,
     allowAutonomousDrafts: input.allowAutonomousDrafts as boolean,
     allowAutonomousPayments: input.allowAutonomousPayments as boolean,
@@ -77,7 +81,7 @@ export class BusinessPolicyStore {
   get(company: string): BusinessPolicy {
     validId(company, "company");
     const row = this.db.prepare("SELECT record FROM business_policy WHERE company_id=?").get(company);
-    return row ? JSON.parse(String(row.record)) as BusinessPolicy : { ...initialPolicy };
+    return row ? { ...initialPolicy, ...(JSON.parse(String(row.record)) as BusinessPolicy) } : { ...initialPolicy };
   }
   update(company: string, input: unknown, expectedRevision: number, actor: string): BusinessPolicy {
     validId(company, "company"); validId(actor, "actor");
