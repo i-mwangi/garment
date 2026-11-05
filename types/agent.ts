@@ -40,7 +40,7 @@ export interface AgentPlan {
   unallocatedUsdc: string;
   actions: AgentAction[];
   aiReview?: {
-    provider: "azure";
+    provider: "azure" | "near_ai";
     model: string;
     responseId: string;
     summary: string;

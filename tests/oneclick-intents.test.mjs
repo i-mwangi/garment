@@ -63,6 +63,15 @@ test('provider refund details remain candidates until a Base receipt proves the 
   assert.equal(status.progress, 'refunded');
 });
 
+test('signed fee fields remain bound to the saved quote', () => {
+  const priced = { ...quote, quote: { ...quote.quote, withdrawFee: '100', refundFee: '50' } };
+  const order = acceptOneClickQuote(priced, expected, validSignature);
+  assert.equal(order.withdrawFeeUnits, '100');
+  assert.equal(order.refundFeeUnits, '50');
+  assert.throws(() => readOneClickStatus({ correlationId: order.correlationId, quoteResponse: {
+    ...priced, quote: { ...priced.quote, withdrawFee: '101' } }, status: 'PENDING_DEPOSIT' }, order, validSignature), /changed/);
+});
+
 test('exact-output checkout fixes the invoice amount and preserves quoted Base input', () => {
   const checkoutRequest = { ...request, swapType: 'EXACT_OUTPUT', amount: '1000000' };
   const checkout = { ...quote, quoteRequest: checkoutRequest,

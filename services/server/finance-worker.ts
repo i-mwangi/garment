@@ -74,7 +74,7 @@ export async function runFinanceWorker(companyId: string) {
             return !!obligation && (obligation.kind !== "bill" || isOwnerApprovedProcurementBill(obligation));
           });
           if (!eligible.length) return { runId: request.requestId, recordIds: [] };
-          const reviewed = await reviewAgentPlan(plan);
+          const reviewed = await reviewAgentPlan(plan, fetch, { companyId, reservationId: `near-ai:plan:${request.requestId}` });
           const binding = readNearDeployment().treasury;
           const saved = runs.save(companyId, "finance-worker", request, { ...reviewed, fundingSource: "treasury_vault", networkId: binding.networkId as "testnet" | "mainnet", vaultId: binding.accountId });
           return { runId: saved.id, recordIds: eligible.map(action => action.recordId) };

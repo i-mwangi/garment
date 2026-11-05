@@ -30,6 +30,8 @@ function publicOrder(saved: ReturnType<ReturnType<typeof openOneClickOrders>["ge
     destinationChain: "NEAR",
     destinationToken: "USDC",
     minimumReceivedUnits: saved.order.minimumOutputUnits,
+    withdrawFeeUnits: saved.order.withdrawFeeUnits ?? null,
+    refundFeeUnits: saved.order.refundFeeUnits ?? null,
     recipient: saved.order.recipient,
     depositAddress: saved.order.depositAddress,
     depositMemo: saved.order.depositMemo,

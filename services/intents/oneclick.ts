@@ -19,6 +19,8 @@ export interface OneClickOrder {
   depositMemo: string | null;
   correlationId: string;
   signedQuote: unknown;
+  withdrawFeeUnits: string | null;
+  refundFeeUnits: string | null;
 }
 
 export type OneClickProgress = "awaiting_deposit" | "deposit_seen" | "processing" | "incomplete_deposit" | "provider_success_unverified" | "refunded" | "failed";
@@ -29,6 +31,11 @@ function object(value: unknown, name: string): Record<string, unknown> {
 }
 function units(value: unknown, name: string): string {
   if (typeof value !== "string" || !/^[1-9]\d*$/.test(value) || value.length > 78) throw new Error(`Invalid ${name}`);
+  return value;
+}
+function optionalFee(value: unknown, name: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !/^(0|[1-9]\d{0,77})$/.test(value)) throw new Error(`Invalid ${name}`);
   return value;
 }
 function account(value: unknown, name: string): string {
@@ -95,7 +102,8 @@ export function acceptOneClickQuote(input: unknown, expected: {
   const depositMemo = quote.depositMemo === undefined || quote.depositMemo === null ? null : string(quote.depositMemo, "deposit memo", 180);
   const correlationId = string(response.correlationId, "correlation ID", 120);
   return { id: string(expected.id, "order ID", 120), companyId: string(expected.companyId, "company ID", 120), originAsset, destinationAsset,
-    inputUnits: quotedInputUnits, requestAmountUnits: inputUnits, swapType, minimumOutputUnits, recipient, refundTo, deadline, depositAddress, depositMemo, correlationId, signedQuote: input };
+    inputUnits: quotedInputUnits, requestAmountUnits: inputUnits, swapType, minimumOutputUnits, recipient, refundTo, deadline, depositAddress, depositMemo, correlationId, signedQuote: input,
+    withdrawFeeUnits: optionalFee(quote.withdrawFee, "withdrawal fee"), refundFeeUnits: optionalFee(quote.refundFee, "refund fee") };
 }
 
 export function readOneClickStatus(input: unknown, order: OneClickOrder, verifySignature: (signedQuote: unknown) => boolean = verifiedQuote): { progress: OneClickProgress; amountOutUnits: string | null; destinationHashes: string[]; refund?: { amountUnits: string; hashes: string[] } } {
@@ -110,6 +118,7 @@ export function readOneClickStatus(input: unknown, order: OneClickOrder, verifyS
   if (signed.correlationId !== order.correlationId || quote.depositAddress !== order.depositAddress ||
     (quote.depositMemo ?? null) !== order.depositMemo || quote.deadline !== order.deadline ||
     quote.minAmountOut !== originalQuote.minAmountOut || quote.amountOut !== originalQuote.amountOut ||
+    quote.withdrawFee !== originalQuote.withdrawFee || quote.refundFee !== originalQuote.refundFee ||
     request.originAsset !== order.originAsset || request.destinationAsset !== order.destinationAsset ||
     request.amount !== (order.requestAmountUnits ?? order.inputUnits) || request.swapType !== (order.swapType ?? "EXACT_INPUT") || request.recipient !== order.recipient ||
     request.refundTo !== order.refundTo) throw new Error("1Click status changed the saved quote terms");

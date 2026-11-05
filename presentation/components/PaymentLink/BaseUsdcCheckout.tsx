@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 type Checkout = {
-  orderId: string; sourceAmountUnits: string; minimumReceivedUnits: string;
+  orderId: string; sourceAmountUnits: string; minimumReceivedUnits: string; withdrawFeeUnits?: string | null; refundFeeUnits?: string | null;
   recipient: string; depositAddress: string; refundTo: string;
   expiresAt: string; status: string; destinationTransactionHash: string | null; refundTransactionHash?: string | null;
   timeline?: { status: string; transactionHash: string | null; createdAt: string }[];
@@ -81,6 +81,8 @@ export default function BaseUsdcCheckout({ code }: { code: string }) {
       <div className="grid grid-cols-2 gap-2 text-sm">
         <span className="text-text-secondary">Send on Base</span><strong className="text-right num">{amount(order.sourceAmountUnits)} USDC</strong>
         <span className="text-text-secondary">Receive on NEAR</span><strong className="text-right num">At least {amount(order.minimumReceivedUnits)} USDC</strong>
+        <span className="text-text-secondary">NEAR withdrawal fee</span><span className="text-right num">{order.withdrawFeeUnits === null || order.withdrawFeeUnits === undefined ? "Not itemized" : `${amount(order.withdrawFeeUnits)} USDC · included`}</span>
+        <span className="text-text-secondary">Possible Base refund fee</span><span className="text-right num">{order.refundFeeUnits === null || order.refundFeeUnits === undefined ? "Not itemized" : `${amount(order.refundFeeUnits)} USDC`}</span>
         <span className="text-text-secondary">Status</span><strong className="text-right">{label(order.status)}</strong>
       </div>
       <div className="space-y-2 text-sm break-all">

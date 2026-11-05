@@ -24,7 +24,7 @@ export async function prepareAgentPlan(value:unknown,principalId:string,advisory
   const deployment=readNearDeployment(),companyId=deployment.companyId;
   const existing=repository.find(companyId,input);if(existing)return existing;
   const plan=planBusinessActions(input,await vaultPlanningContext(companyId,records.list(companyId)));
-  const reviewed=advisory?await reviewAgentPlan(plan):plan;
+  const reviewed=advisory?await reviewAgentPlan(plan,fetch,{companyId,reservationId:`near-ai:plan:${input.requestId}`}):plan;
   return repository.save(companyId,principalId,input,{...reviewed,fundingSource:"treasury_vault",networkId:deployment.treasury.networkId as "testnet"|"mainnet",vaultId:deployment.treasury.accountId});
  }finally{repository.close();records.close();}
 }
