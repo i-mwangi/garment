@@ -119,7 +119,8 @@ implying that every provider is configured in every deployment.
 flowchart TB
     Operator[Business operator] --> UI[Next.js dashboard and Finance agent]
     Wallet[Web3Auth NEAR wallet] --> UI
-    Assistant[External MCP assistant] --> MCP[Authenticated MCP endpoint]
+    Assistant[External MCP assistant] --> InboundMCP[Inbound MCP /api/mcp]
+    OutboundServer[Approved external MCP server] <--> OutboundMCP[Outbound MCP connection]
 
     subgraph App[Settlbox application]
         API[Authenticated API routes and role checks]
@@ -128,6 +129,7 @@ flowchart TB
         Proposals[Saved agent proposals and exact preconditions]
         Journal[Vault payment journal and native submission journal]
         Workers[Schedule, finance, payout and sales workers]
+        MCPControls[MCP credentials, scopes, fingerprints and audit]
         Store[(SQLite company records, plans and journals)]
         Private[Private receipts and encrypted credentials]
         API --> Chat
@@ -140,7 +142,10 @@ flowchart TB
         Journal --> Store
         Workers --> Journal
         API --> Private
-        MCP --> API
+        InboundMCP --> MCPControls
+        OutboundMCP --> MCPControls
+        MCPControls --> API
+        MCPControls --> Store
     end
 
     UI --> API
@@ -152,17 +157,23 @@ flowchart TB
     NEAR --> Token[NEP-141 USDC contract]
     Vault --> Recipient[Approved recipient]
     Journal --> Intents[Mainnet-only 1Click Intents corridor]
-    API --> Integrations[Sheets, Slack, Stripe, MCP and sandbox adapters]
+    API --> Integrations[Sheets, Slack, Stripe and sandbox adapters]
 ```
 
 **Boundaries:** AI output is not payment authorization. Wallet credentials,
 private keys and server tokens are not supplied to the model or browser.
 Proposals are bound to saved record snapshots and are rejected when the record
-changes after review. The restricted executor can submit only approved native
-contract calls; it cannot approve payments or deploy contracts. The treasury
-vault, company collection account and reserve account are separate identities
-or funding paths where configured. Provider statuses and UI success messages do
-not replace finalized NEAR receipt and event verification.
+changes after review. Inbound MCP credentials are company-scoped, owner-bound,
+expiring, revocable and limited to records or action proposals. Inbound MCP
+proposals return to the existing owner review flow; they cannot approve a
+payment, queue a payment, change vault policy or invoke outbound tools
+directly. Outbound MCP tools are discovered from configured connections,
+fingerprint-checked and executed only after owner review, and their responses
+are untrusted external data. The restricted executor can submit only approved
+native contract calls; it cannot approve payments or deploy contracts. The
+treasury vault, company collection account and reserve account are separate
+identities or funding paths where configured. Provider statuses and UI success
+messages do not replace finalized NEAR receipt and event verification.
 
 ### Agent payment sequence
 
