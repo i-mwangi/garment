@@ -259,9 +259,11 @@ npm run agent:worker
 
 Do not run a duplicate worker alongside `npm start`.
 
-### 6. Configure optional features
+### 6. Implemented capabilities
 
-Configure only the features you intend to use:
+The following capabilities are implemented in the repository. Some require
+provider credentials, wallet funding, approvals or deployment configuration
+before they can be exercised locally or on a live network:
 
 | Feature | Configuration and guidance |
 | --- | --- |
