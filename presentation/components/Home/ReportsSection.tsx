@@ -100,9 +100,20 @@ function formatCurrency(value: number): string {
     return value.toLocaleString("en-US", {
         style: "currency",
         currency: "USD",
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
     });
+}
+function formatAxis(value: number): string {
+    if (Math.abs(value) >= 1000)
+        return `$${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k`;
+    return `$${value.toFixed(value >= 10 ? 0 : 2)}`;
+}
+function inRange(timestamp: string, range: DateRange): boolean {
+    const time = new Date(timestamp).getTime();
+    if (Number.isNaN(time))
+        return false;
+    return time >= range.start.getTime() && time <= range.end.getTime() + 86400000 - 1;
 }
 function formatDate(timestamp: string): string {
     return new Date(timestamp).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
@@ -178,14 +189,21 @@ export const ReportsSection = () => {
     const { data } = useDemo();
     const { openModal } = useModal();
     const [activeTab, setActiveTab] = useState<string>("income");
-    const [dateRange, setDateRange] = useState<DateRange>(() => ({
-        start: new Date(2026, 0, 1),
-        end: new Date(2026, 2, 31),
-    }));
+    const [dateRange, setDateRange] = useState<DateRange>(() => {
+        const now = new Date();
+        return { start: new Date(now.getFullYear(), 0, 1), end: now };
+    });
+    const periodLabel = `${dateRange.start.toLocaleDateString("en-US", { month: "short", year: "numeric" })} – ${dateRange.end.toLocaleDateString("en-US", { month: "short", year: "numeric" })}`;
     const transactions = data?.transactions ?? [];
-    const monthlyFinancials = data?.monthlyFinancials ?? [];
+    const monthlyFinancials = useMemo(() => {
+        return (data?.monthlyFinancials ?? []).filter(row => {
+            const [year, month] = row.month.split("-").map(Number);
+            const start = new Date(year, month - 1, 1);
+            return start >= new Date(dateRange.start.getFullYear(), dateRange.start.getMonth(), 1) && start <= dateRange.end;
+        });
+    }, [data?.monthlyFinancials, dateRange]);
     const totalIncome = useMemo(() => monthlyFinancials.reduce((sum, m) => sum + m.income, 0), [monthlyFinancials]);
-    const totalExpenses = useMemo(() => monthlyFinancials.reduce((sum, m) => sum + m.expenses, 0), [monthlyFinancials]);
+    const totalExpenses = useMemo(() => monthlyFinancials.reduce((sum, m) => sum + m.expenses + m.payroll, 0), [monthlyFinancials]);
     const totalPayroll = useMemo(() => monthlyFinancials.reduce((sum, m) => sum + m.payroll, 0), [monthlyFinancials]);
     const netFlow = useMemo(() => totalIncome - totalExpenses, [totalIncome, totalExpenses]);
     const companyCountry = data?.company?.country ?? "";
@@ -194,24 +212,25 @@ export const ReportsSection = () => {
         return match ?? TAX_JURISDICTIONS[0];
     }, [companyCountry]);
     const taxRate = jurisdiction.corpTaxRate / 100;
-    const estimatedTax = useMemo(() => Math.round(netFlow * taxRate), [netFlow, taxRate]);
+    const estimatedTax = useMemo(() => Math.round(netFlow * taxRate * 100) / 100, [netFlow, taxRate]);
+    const scopedTransactions = useMemo(() => transactions.filter(tx => inRange(tx.timestamp, dateRange)), [transactions, dateRange]);
     const filteredTransactions = useMemo(() => {
         switch (activeTab) {
             case "income":
-                return transactions.filter(tx => tx.type === "RECEIVE" || tx.type === "INVOICE");
+                return scopedTransactions.filter(tx => tx.type === "RECEIVE" || tx.type === "INVOICE");
             case "expenses":
-                return transactions.filter(tx => tx.type === "SEND" || tx.type === "BILL");
+                return scopedTransactions.filter(tx => tx.type === "SEND" || tx.type === "BILL");
             case "payroll":
-                return transactions.filter(tx => tx.category === "Payroll");
+                return scopedTransactions.filter(tx => tx.category.toLowerCase() === "payroll");
             case "tax":
-                return transactions;
+                return scopedTransactions;
             default:
-                return transactions;
+                return scopedTransactions;
         }
-    }, [transactions, activeTab]);
+    }, [scopedTransactions, activeTab]);
     const incomeBreakdown = useMemo(() => {
         const categoryMap: Record<string, number> = {};
-        transactions
+        scopedTransactions
             .filter(tx => tx.type === "RECEIVE" || tx.type === "INVOICE")
             .forEach(tx => {
             const cat = tx.category || "Other";
@@ -220,10 +239,10 @@ export const ReportsSection = () => {
         return Object.entries(categoryMap)
             .map(([name, value], i) => ({ name, value, color: PIE_COLORS[i % PIE_COLORS.length] }))
             .filter(e => e.value > 0);
-    }, [transactions]);
+    }, [scopedTransactions]);
     const expenseBreakdown = useMemo(() => {
         const categoryMap: Record<string, number> = {};
-        transactions
+        scopedTransactions
             .filter(tx => tx.type === "SEND" || tx.type === "BILL")
             .forEach(tx => {
             const cat = PIE_CATEGORIES.includes(tx.category) ? tx.category : "Other";
@@ -234,7 +253,7 @@ export const ReportsSection = () => {
             value: categoryMap[cat] || 0,
             color: PIE_COLORS[i],
         })).filter(entry => entry.value > 0);
-    }, [transactions]);
+    }, [scopedTransactions]);
     const [simEmployees, setSimEmployees] = useState<{
         role: string;
         monthlyCost: number;
@@ -366,7 +385,7 @@ export const ReportsSection = () => {
       
       {activeTab === "income" && (<>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card title="Total Income" amount={formatCurrency(totalIncome)} info="Total income for Q1 2026"/>
+            <Card title="Total Income" amount={formatCurrency(totalIncome)} info={`Total income for ${periodLabel}`}/>
             <Card title="Avg Monthly Income" amount={formatCurrency(monthlyFinancials.length > 0 ? Math.round(totalIncome / monthlyFinancials.length) : 0)} info="Average monthly income across the period"/>
             <Card title="Income Transactions" amount={filteredTransactions.length.toString()} info="Number of income transactions"/>
           </div>
@@ -377,7 +396,7 @@ export const ReportsSection = () => {
                 <BarChart data={monthlyFinancials.map(m => ({ month: m.month, Income: m.income }))} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--primary-divider)"/>
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }}/>
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}/>
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} tickFormatter={formatAxis}/>
                   <Tooltip content={<ChartTooltip />}/>
                   <Bar dataKey="Income" fill="#4CAF50" radius={[4, 4, 0, 0]}/>
                 </BarChart>
@@ -392,7 +411,7 @@ export const ReportsSection = () => {
       
       {activeTab === "expenses" && (<>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card title="Total Expenses" amount={formatCurrency(totalExpenses)} info="Total expenses for Q1 2026"/>
+            <Card title="Total Expenses" amount={formatCurrency(totalExpenses)} info={`Total expenses for ${periodLabel}`}/>
             <Card title="Avg Monthly Expenses" amount={formatCurrency(monthlyFinancials.length > 0 ? Math.round(totalExpenses / monthlyFinancials.length) : 0)} info="Average monthly expenses across the period"/>
             <Card title="Net Flow" amount={formatCurrency(netFlow)} info="Net cash flow (income minus expenses)"/>
           </div>
@@ -403,7 +422,7 @@ export const ReportsSection = () => {
                 <BarChart data={monthlyFinancials.map(m => ({ month: m.month, Expenses: m.expenses }))} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--primary-divider)"/>
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }}/>
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}/>
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} tickFormatter={formatAxis}/>
                   <Tooltip content={<ChartTooltip />}/>
                   <Bar dataKey="Expenses" fill="#F44336" radius={[4, 4, 0, 0]}/>
                 </BarChart>
@@ -418,7 +437,7 @@ export const ReportsSection = () => {
       
       {activeTab === "payroll" && (<>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card title="Total Payroll" amount={formatCurrency(totalPayroll)} info="Total payroll for Q1 2026"/>
+            <Card title="Total Payroll" amount={formatCurrency(totalPayroll)} info={`Total payroll for ${periodLabel}`}/>
             <Card title="Avg Monthly Payroll" amount={formatCurrency(monthlyFinancials.length > 0 ? Math.round(totalPayroll / monthlyFinancials.length) : 0)} info="Average monthly payroll across the period"/>
             <Card title="Treasury Balance" amount={formatCurrency(treasuryBalance)} info="Current total balance across all accounts"/>
             <Card title="Runway" amount={`${simExtraBurn > 0 ? simRunwayMonths : currentRunwayMonths} months`} info={simExtraBurn > 0
@@ -431,7 +450,7 @@ export const ReportsSection = () => {
               <BarChart data={monthlyFinancials.map(m => ({ month: m.month, Payroll: m.payroll }))} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--primary-divider)"/>
                 <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }}/>
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}/>
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} tickFormatter={formatAxis}/>
                 <Tooltip content={<ChartTooltip />}/>
                 <Bar dataKey="Payroll" fill="#2196F3" radius={[4, 4, 0, 0]}/>
               </BarChart>
@@ -443,7 +462,7 @@ export const ReportsSection = () => {
       {activeTab === "tax" && (<>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card title="Gross Income" amount={formatCurrency(totalIncome)} info="Total gross income for Q1 2026"/>
+            <Card title="Gross Income" amount={formatCurrency(totalIncome)} info={`Total gross income for ${periodLabel}`}/>
             <Card title="Deductible Expenses" amount={formatCurrency(totalExpenses)} info="Total deductible expenses"/>
             <Card title={`Est. Tax (${jurisdiction.corpTaxRate}%)`} amount={formatCurrency(estimatedTax > 0 ? estimatedTax : 0)} info={`Estimated at ${jurisdiction.name} corporate tax rate`}/>
             <Card title="Filing Deadline" amount={jurisdiction.filingDeadline} info={`Tax filing deadline for ${jurisdiction.name}`}/>
@@ -456,7 +475,7 @@ export const ReportsSection = () => {
                 <BarChart data={monthlyFinancials.map(m => ({ month: m.month, Income: m.income, Expenses: m.expenses }))} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--primary-divider)"/>
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }}/>
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}/>
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} tickFormatter={formatAxis}/>
                   <Tooltip content={<ChartTooltip />}/>
                   <Bar dataKey="Income" fill="#4CAF50" radius={[4, 4, 0, 0]}/>
                   <Bar dataKey="Expenses" fill="#F44336" radius={[4, 4, 0, 0]}/>

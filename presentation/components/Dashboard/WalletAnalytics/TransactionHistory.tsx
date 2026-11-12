@@ -53,11 +53,11 @@ const TransactionHistory = ({ onTransactionClick, }: {
             year: "numeric",
         });
     };
-    const formatCurrency = (amount: number) => `$${amount.toLocaleString("en-US")}`;
+    const formatCurrency = (amount: number) => `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const tableHeaders = ["Date", "Type", "Category", "From", "To", "Amount", "Status"];
     const tableData: Record<string, CellContent>[] = useMemo(() => {
         return filteredTransactions.map(tx => {
-            const isIncome = tx.type === "RECEIVE";
+            const isIncome = tx.type === "RECEIVE" || tx.type === "INVOICE";
             return {
                 Date: (<span className="text-text-secondary text-sm">
             {formatDate(tx.timestamp)}

@@ -16,20 +16,28 @@ const CARD_BG_STYLE = {
     backgroundRepeat: "no-repeat",
 } as const;
 function fmtCurrency(amount: number, currency: string): string {
-    const symbols: Record<string, string> = { USD: "$", EUR: "\u20AC", AED: "AED " };
+    const symbols: Record<string, string> = { USD: "$", USDC: "$", EUR: "\u20AC", AED: "AED " };
     const prefix = symbols[currency] ?? "";
     return `${prefix}${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
-function copyToClipboard(_text: string, _label: string) {
-    toast.error("Historical account details cannot be used to receive funds");
+function copyToClipboard(text: string, label: string, live: boolean) {
+    if (!live) {
+        toast.error("Historical account details cannot be used to receive funds");
+        return;
+    }
+    void navigator.clipboard.writeText(text).then(() => toast.success(`${label} copied`)).catch(() => toast.error("Could not copy"));
 }
 const CARD_GRADIENT: Record<string, string> = {
     USD: "linear-gradient(135deg, #1b3a8f 0%, #2f6df6 100%)",
+    USDC: "linear-gradient(135deg, #1b3a8f 0%, #2f6df6 100%)",
     EUR: "linear-gradient(135deg, #4c1d95 0%, #7c3aed 100%)",
     AED: "linear-gradient(135deg, #064e3b 0%, #0c9f6e 100%)",
 };
+function isLiveAccount(account: VirtualAccount): boolean {
+    return account.id.startsWith("live-usdc-");
+}
 function primaryNumber(account: VirtualAccount): string {
-    const d = account.details.find((x) => /account number|iban/i.test(x.label));
+    const d = account.details.find((x) => /NEAR account|account number|iban/i.test(x.label));
     return d?.value ?? account.details[1]?.value ?? "";
 }
 function CardFace({ account, className = "" }: {
@@ -86,8 +94,8 @@ function AccountModal({ account, onClose }: {
 }) {
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
     const handleCopyDetail = (label: string, value: string) => {
-        copyToClipboard(value, label);
-
+        copyToClipboard(value, label, isLiveAccount(account));
+        if (isLiveAccount(account)) setCopiedKey(label);
     };
     return (<BaseModal isOpen onClose={onClose} zIndex={1000}>
       <ModalHeader title="Account details" onClose={onClose}/>
@@ -99,7 +107,7 @@ function AccountModal({ account, onClose }: {
           
           <SecondaryButton variant="light" buttonClassName="w-fit self-center whitespace-nowrap" onClick={() => {
             const allDetails = account.details.map((d) => `${d.label}: ${d.value}`).join("\n");
-            copyToClipboard(allDetails, "All account details");
+            copyToClipboard(allDetails, "All account details", isLiveAccount(account));
         }} text={<span className="flex items-center gap-2">
                 <Copy width={14} height={14} strokeWidth={2}/>
                 Copy all details
@@ -129,8 +137,9 @@ function AccountModal({ account, onClose }: {
 }
 export default function GlobalAccountPage() {
     const history = useProviderHistory();
-    const VIRTUAL_ACCOUNTS = history.data?.globalAccounts.accounts || [];
-    const RECENT_DEPOSITS = history.data?.globalAccounts.deposits || [];
+    const live = history.data?.liveCollection;
+    const VIRTUAL_ACCOUNTS = live?.accounts || [];
+    const RECENT_DEPOSITS = live?.deposits || [];
     const { setTitle, setShowBackArrow } = useTitle();
     const [modalAccount, setModalAccount] = useState<VirtualAccount | null>(null);
     useEffect(() => {
@@ -141,12 +150,12 @@ export default function GlobalAccountPage() {
       </div>);
         setShowBackArrow(false);
     }, []);
-    return (<div className="flex w-full h-full flex-col overflow-y-auto"><p className="px-6 pt-4 text-sm text-text-secondary">Historical examples. Bank collection requires a configured provider.</p>{history.error && <p role="alert">{history.error.message}</p>}
+    return (<div className="flex w-full h-full flex-col overflow-y-auto"><p className="px-6 pt-4 text-sm text-text-secondary">Live NEAR USDC collection. Fiat bank accounts are not issued.</p>{history.error && <p role="alert">{history.error.message}</p>}
       
       <div className="flex w-full items-start justify-between gap-4 px-6 pt-6 pb-3">
         <div className="flex flex-col gap-0.5">
           <h1 className="text-[26px] font-bold leading-tight tracking-tight text-text-primary">Global Account</h1>
-          <p className="text-[14px] text-text-secondary">Receive fiat deposits from anywhere in the world.</p>
+          <p className="text-[14px] text-text-secondary">Receive native USDC on the company NEAR collection wallet.</p>
         </div>
       </div>
 
@@ -157,8 +166,7 @@ export default function GlobalAccountPage() {
             (e.target as HTMLImageElement).style.display = "none";
         }}/>
           <p className="text-xs leading-relaxed text-text-secondary">
-            Provider-supported bank accounts may accept deposits in USD, EUR, and AED.
-            Bank collection and conversion require a configured provider.
+            This account is the workspace NEAR collection wallet. Inbound USDC payment links and invoices settle here. Fiat USD, EUR, and AED virtual accounts are not connected.
           </p>
         </div>
       </div>
@@ -170,20 +178,20 @@ export default function GlobalAccountPage() {
           <span className="num text-2xl leading-none text-text-primary">{VIRTUAL_ACCOUNTS.length}</span>
         </div>
         <div className="relative flex w-full flex-col gap-3 overflow-hidden rounded-xl border border-primary-divider p-4" style={CARD_BG_STYLE}>
-          <span className="text-sm leading-none text-text-secondary">Historical currencies</span>
-          <span className="text-2xl font-semibold leading-none text-text-primary">USD, EUR, AED</span>
+          <span className="text-sm leading-none text-text-secondary">Network</span>
+          <span className="text-2xl font-semibold leading-none text-text-primary">{live?.networkName || "NEAR"}</span>
         </div>
         <div className="relative flex w-full flex-col gap-3 overflow-hidden rounded-xl border border-primary-divider p-4" style={CARD_BG_STYLE}>
-          <span className="text-sm leading-none text-text-secondary">Historical received (30d)</span>
+          <span className="text-sm leading-none text-text-secondary">Collection balance</span>
           <span className="num text-2xl leading-none" style={{ color: "var(--badge-success-text)" }}>
-            $296,100.00
+            {live ? fmtCurrency(Number(live.balanceUsdc), "USDC") : history.isLoading ? "…" : "$0.00"}
           </span>
         </div>
       </div>
 
       
       <div className="flex flex-col gap-1 px-6 pb-2 pt-3">
-        <span className="text-lg font-semibold text-text-primary">Your Virtual Accounts</span>
+        <span className="text-lg font-semibold text-text-primary">Collection account</span>
         <div className="-mx-1 flex snap-x gap-4 overflow-x-auto px-1 pb-3 pt-2">
           {VIRTUAL_ACCOUNTS.map((account) => (<VirtualCard key={account.id} account={account} onClick={() => setModalAccount(account)}/>))}
         </div>
@@ -204,6 +212,7 @@ export default function GlobalAccountPage() {
               </tr>
             </thead>
             <tbody>
+              {!RECENT_DEPOSITS.length && (<tr><td className="px-5 py-6 text-sm text-text-secondary" colSpan={5}>No verified inbound USDC yet. Issued payment links settle into this wallet.</td></tr>)}
               {RECENT_DEPOSITS.map((deposit) => (<tr key={deposit.id} className="border-b border-primary-divider last:border-0">
                   <td className="px-5 py-3.5 text-sm font-medium text-text-primary">{deposit.sender}</td>
                   <td className="px-5 py-3.5 text-center text-sm text-text-secondary">

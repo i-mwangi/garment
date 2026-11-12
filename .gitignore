@@ -97,9 +97,11 @@ Desktop.ini
 /docs/NEAR-PARA-MIGRATION-PLAN.md
 /docs/source-inventory.json
 /docs/FILE-MIGRATION-LEDGER.md
+/docs/FILE-REPLACEMENTS.json
 /docs/REPLICATION-RESULT.json
 /docs/REPLICATION-STATUS.json
 /docs/AUTONOMOUS-BUSINESS-LOCAL-PLAN.md
 
-# Keep Markdown notes local.
+# Keep markdown local except the root README.
 *.md
+!/README.md

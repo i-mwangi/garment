@@ -10,6 +10,11 @@ export interface GlobalAccountHistory {
   accounts: VirtualAccount[];
   deposits: { id: string; currency: string; method: string; amount: number; sender: string; date: string; status: string }[];
 }
+export interface LiveCollectionView extends GlobalAccountHistory {
+  balanceUsdc: string;
+  received30dUsdc: string;
+  networkName: string;
+}
 export interface YieldHistory {
   apy: number;
   monthly: { date: string; earned: number }[];

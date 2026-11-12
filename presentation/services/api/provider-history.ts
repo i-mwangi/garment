@@ -3,11 +3,11 @@ import {useNativeEarn} from "@/services/api/near-earn";
 import { useQuery } from "@tanstack/react-query";
 import { useDemo } from "@/presentation/contexts/DemoProvider";
 import { workspaceFetch } from "./seeded-workspace";
-import type { GlobalAccountHistory, YieldHistory } from "@/types/provider-history";
+import type { GlobalAccountHistory, LiveCollectionView, YieldHistory } from "@/types/provider-history";
 
 export function useProviderHistory() {
   const { activeEntityId } = useDemo();
-  return useQuery({ queryKey: ["provider-history", activeEntityId], queryFn: () => workspaceFetch<{ globalAccounts: GlobalAccountHistory; yield: YieldHistory }>(`/api/provider-history?entity=${encodeURIComponent(activeEntityId)}`), staleTime: 30000 });
+  return useQuery({ queryKey: ["provider-history", activeEntityId], queryFn: () => workspaceFetch<{ globalAccounts: GlobalAccountHistory; yield: YieldHistory; liveCollection?: LiveCollectionView }>(`/api/provider-history?entity=${encodeURIComponent(activeEntityId)}`), staleTime: 0 });
 }
 export function useYieldHistory() {
   const history = useProviderHistory();

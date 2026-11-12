@@ -61,6 +61,18 @@ test("planning rejects foreign or incomplete records and unsupported parameters"
   assert.throws(() => validateAgentPlanRequest({ ...request, throughDate: "2026-02-30" }), /calendar/);
 });
 
+test("undeployed cached plans can be forgotten after a vault is configured", () => {
+  const directory = mkdtempSync(join(tmpdir(), "settlbox-agent-"));
+  const path = join(directory, "business.sqlite");
+  const repository = new AgentRunRepository(path);
+  try {
+    const undeployed = repository.save("company", "owner", request, { mode: "proposal_only", engine: "deterministic", planningUnavailableReason: "The NEAR treasury contract is not deployed or activated. Vault balance, payment eligibility and approvals cannot be checked yet.", balanceUsdc: "0", reserveUsdc: request.reserveUsdc, obligationsUsdc: "0", unallocatedUsdc: "0", actions: [] });
+    assert.equal(repository.find("company", request)?.id, undeployed.id);
+    repository.forget("company", request.requestId);
+    assert.equal(repository.find("company", request), undefined);
+  } finally { repository.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
 test("agent history survives reopening, isolates companies and binds retries to original terms", () => {
   const directory = mkdtempSync(join(tmpdir(), "settlbox-agent-"));
   const path = join(directory, "business.sqlite");
@@ -75,6 +87,16 @@ test("agent history survives reopening, isolates companies and binds retries to 
     assert.deepEqual(repository.list("company"), [first]);
     assert.deepEqual(repository.list("another"), []);
   } finally { repository.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("a paused deployed vault still reports balances and blocks executable payments", () => {
+  const result = planBusinessActions(request, { ...context, paused: true });
+  assert.equal(result.balanceUsdc, "10");
+  assert.equal(result.obligationsUsdc, "1");
+  assert.equal(result.cashPosition.reviewablePaymentsUsdc, "0");
+  assert.equal(result.cashPosition.blockedPaymentsUsdc, "1");
+  assert.equal(result.actions[0].disposition, "blocked");
+  assert.match(result.actions[0].reasons[0], /paused/);
 });
 
 test("native planning binds exact recipients and rejects excess USDC precision",()=>{

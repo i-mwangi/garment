@@ -17,6 +17,9 @@ export class AgentRunRepository {
     if (row.request !== JSON.stringify(canonical)) throw new Error("Request ID belongs to different planning terms");
     return JSON.parse(String(row.record)) as AgentRun;
   }
+  forget(companyId: string, requestId: string) {
+    this.database.prepare("DELETE FROM agent_runs WHERE company_id=? AND id=?").run(companyId, requestId);
+  }
   save(companyId: string, requestedBy: string, request: AgentPlanRequest, plan: AgentPlan): AgentRun {
     if (!companyId.trim() || !requestedBy.trim()) throw new Error("A company and requesting principal are required");
     const canonical = validateAgentPlanRequest(request);

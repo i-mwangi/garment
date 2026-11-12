@@ -40,6 +40,7 @@ export function planBusinessActions(input: AgentPlanRequest, context: AgentPlann
     if (!incoming) {
       assertNearAccountId(record.recipient);
       obligations += amount;
+      if (context.paused) reasons.push("Native vault is paused; activate it before preparing executable payments");
       if (!context.policy.allowedRecipients.some(address => address === record.recipient)) reasons.push("Recipient is outside the treasury allowlist");
       if (amount > parseBaseUnits(context.policy.maxPaymentBaseUnits)) reasons.push("Amount exceeds the payment limit");
       if (amount > dailyRemaining) reasons.push("Amount exceeds the remaining daily limit");

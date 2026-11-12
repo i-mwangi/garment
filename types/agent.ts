@@ -58,6 +58,7 @@ export interface AgentRun extends AgentPlan {
 
 export interface AgentPlanningContext {
   companyId: string;
+  paused?: boolean;
   balanceBaseUnits: string;
   reservedBaseUnits: string;
   committedTodayBaseUnits: string;

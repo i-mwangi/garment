@@ -1,9 +1,8 @@
 import { openTeamMembers } from "./team-members.ts";
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import type { DemoProposal, DemoAccount } from "../../presentation/contexts/DemoProvider";
 import { openVaultPayments } from "./vault-payments.ts";
-import { readNearDeployment } from "./near-contract-config.ts";
+import { nearContractConfigPath, readNearDeployment } from "./near-contract-config.ts";
 import { verifiedVault } from "../near/contract-state.ts";
 import type { SeededWorkspace } from "../../types/seeded-workspace";
 import type { readNearTreasuryIdentity } from "./near-treasury-config";
@@ -26,14 +25,15 @@ export async function nearWorkspaceView(workspace: SeededWorkspace, identity: Re
   }
   const exact=await balanceCache.value;
   const template=workspace.data.accounts[0];
-  const accounts:DemoAccount[]=template?[{...template,accountId:identity.accountId,name:"NEAR collection wallet",members:[],publicKeys:[],threshold:1}]:[];
+  const walletAccount=(accountId:string,name:string,extra:Partial<DemoAccount>):DemoAccount=>({...template!,...extra,id:accountId,uuid:accountId,accountId,name});
+  const accounts:DemoAccount[]=template?[walletAccount(identity.accountId,"NEAR collection wallet",{members:[],publicKeys:[],threshold:1})]:[];
   const balances=Object.fromEntries(accounts.map((account,index)=>[account.accountId,[{faucetId:reader.network.usdcContractId,symbol:"USDC",amount:index===0?Number(exact):0,decimals:6,usdValue:index===0?Number(exact):0}]]));
   const records=openBusinessRecords();const links=openPaymentLinks();
   try {
     const observed=reconcileInvoiceCollections(identity.companyId,records,links);
-    const data=projectWorkspaceSettlement(workspace.data,observed,identity.accountId);
+    const data=projectWorkspaceSettlement(workspace.data,observed,identity.accountId,links.list());
     const pendingProposals:DemoProposal[]=[];
-    if(existsSync(resolve(process.env.SETTLBOX_NEAR_CONTRACT_CONFIG || ".data/near-contracts.json"))){
+    if(existsSync(nearContractConfigPath())){
       const {treasury}=readNearDeployment(),snapshot=await verifiedVault(treasury),journal=openVaultPayments();
       const team=openTeamMembers();
       let members:{name:string;commitment:string;role:string}[]=[];
@@ -42,7 +42,7 @@ export async function nearWorkspaceView(workspace: SeededWorkspace, identity: Re
         const permissions=await Promise.all(candidates.map(member=>snapshot.read("is_approver",{account_id:member.walletAddress})));
         members=candidates.filter((_,i)=>permissions[i]===true).map(member=>({name:`${member.firstName} ${member.lastName}`.trim(),commitment:member.walletAddress!,role:member.role}));
       }finally{team.close();}
-      if(template) {accounts.push({...template,accountId:treasury.accountId,name:"NEAR policy treasury",members,publicKeys:members.map(member=>member.commitment),threshold:snapshot.config.policy.required_approvals});balances[treasury.accountId]=[{faucetId:reader.network.usdcContractId,symbol:"USDC",amount:Number(formatAmount(BigInt(snapshot.config.liquid))),decimals:6,usdValue:Number(formatAmount(BigInt(snapshot.config.liquid)))}];}
+      if(template) {accounts.push(walletAccount(treasury.accountId,"NEAR policy treasury",{members,publicKeys:members.map(member=>member.commitment),threshold:snapshot.config.policy.required_approvals}));balances[treasury.accountId]=[{faucetId:reader.network.usdcContractId,symbol:"USDC",amount:Number(formatAmount(BigInt(snapshot.config.liquid))),decimals:6,usdValue:Number(formatAmount(BigInt(snapshot.config.liquid)))}];}
       try {
         for(const payment of journal.list(identity.companyId).filter(p=>p.networkId===identity.networkId && p.vaultId===treasury.accountId && p.codeHash===treasury.codeHash && !["paid","cancelled"].includes(p.status))){
           const state=await snapshot.payment(payment.id),record=records.get(identity.companyId,payment.recordId);

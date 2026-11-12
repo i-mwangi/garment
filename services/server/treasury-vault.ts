@@ -1,11 +1,10 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { readNearDeployment } from "./near-contract-config.ts";
+import { nearContractConfigPath, readNearDeployment } from "./near-contract-config.ts";
 import { verifiedVault } from "../near/contract-state.ts";
 import { formatAmount } from "../near/amount.ts";
 import type { TreasuryVaultStatus } from "../../types/treasury-vault.ts";
 export async function readTreasuryVaultStatus(companyId:string):Promise<TreasuryVaultStatus> {
- const path=resolve(process.env.SETTLBOX_NEAR_CONTRACT_CONFIG || ".data/near-contracts.json");
+ const path=nearContractConfigPath();
  if(!existsSync(path))return {state:"not_configured",message:"Deploy and verify the native NEAR treasury vault before enabling payments."};
  const deployment=readNearDeployment();if(deployment.companyId!==companyId)throw new Error("Native vault belongs to another workspace");
  const vault=await verifiedVault(deployment.treasury),p=vault.config.policy;

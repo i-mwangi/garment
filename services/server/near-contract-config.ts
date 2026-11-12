@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { encodeBase58 } from "../near/base58.ts";
 import { account, record } from "../near/contract-snapshot.ts";
 import { getNearNetwork } from "../near/network.ts";
@@ -34,9 +35,16 @@ export function validateNearDeployment(value:unknown, workspace:Workspace, token
   return {companyId:workspace.companyId,treasury,gifts};
 }
 
+export function nearContractConfigPath() {
+  if (process.env.SETTLBOX_NEAR_CONTRACT_CONFIG) return resolve(process.env.SETTLBOX_NEAR_CONTRACT_CONFIG);
+  const fromCwd = resolve(".data/near-contracts.json");
+  if (existsSync(fromCwd)) return fromCwd;
+  return resolve(fileURLToPath(new URL("../../.data/near-contracts.json", import.meta.url)));
+}
+
 export function readNearDeployment() {
   const workspace=readNearTreasuryIdentity();
-  const config=JSON.parse(readFileSync(resolve(process.env.SETTLBOX_NEAR_CONTRACT_CONFIG || ".data/near-contracts.json"),"utf8"));
+  const config=JSON.parse(readFileSync(nearContractConfigPath(),"utf8"));
   const manifest=JSON.parse(readFileSync(resolve("docs/NEAR-CONTRACT-ARTIFACTS.json"),"utf8"));
   return validateNearDeployment(config,workspace,getNearNetwork().usdcContractId,manifest.artifacts);
 }

@@ -25,12 +25,35 @@ test("workspace invoice and bill histories follow canonical settlement, never su
   const pending = projectWorkspaceSettlement(data, [record], address);
   assert.equal(pending.invoices.at(-1).status, "SUBMITTED");
   assert.equal(pending.bills.at(-1).status, "SUBMITTED");
-  assert.equal(pending.transactions.some(transaction => transaction.id === record.id), false);
+  const pendingTx = pending.transactions.find(transaction => transaction.id === record.id);
+  assert.equal(pendingTx.status, "PENDING");
+  assert.equal(pendingTx.txHash, "");
+  assert.equal(pendingTx.category, "Payroll");
   const paid = projectWorkspaceSettlement(data, [{ ...record, status: "paid" }], address);
   assert.equal(paid.invoices.at(-1).status, "PAID");
   assert.equal(paid.bills.at(-1).status, "PAID");
-  assert.equal(paid.transactions.filter(transaction => transaction.id === record.id).length, 1);
+  const paidTx = paid.transactions.filter(transaction => transaction.id === record.id);
+  assert.equal(paidTx.length, 1);
+  assert.equal(paidTx[0].status, "COMPLETED");
+  assert.equal(paidTx[0].txHash, record.transactionHash);
   const repeated = projectWorkspaceSettlement(paid, [{ ...record, status: "paid" }], address);
   assert.deepEqual(repeated.transactions, paid.transactions);
   assert.equal(repeated.invoices[0].status, data.invoices[0].status);
+});
+
+test("accounting books fill income expense payroll tax series from live records", () => {
+  const data = JSON.parse(readFileSync("public/demo-data-entity-3.json", "utf8"));
+  data.transactions = [];
+  data.monthlyFinancials = [];
+  const address = "7181acde7181acde7181acde7181acde7181acde7181acde7181acde7181344b";
+  const stamp = "2026-11-12T12:00:00.000Z";
+  const books = projectWorkspaceSettlement(data, [
+    { id: "inv-live", kind: "invoice", title: "NEAR-LIVE-001", counterparty: "Ada", recipient: address, amount: "0.5", dueDate: "2026-11-20", description: "Work", status: "issued", createdAt: stamp, updatedAt: stamp, paymentLinkCode: "aa", transactionHash: null },
+    { id: "bill-live", kind: "bill", title: "Ada bill", counterparty: "Ada Contractor", recipient: address, amount: "0.25", dueDate: "2026-11-20", description: "Bill", status: "issued", createdAt: stamp, updatedAt: stamp, paymentLinkCode: null, transactionHash: null },
+    { id: "pay-live", kind: "payroll", title: "Ada payroll", counterparty: "Ada Contractor", recipient: address, amount: "0.25", dueDate: "2026-11-20", description: "Pay", status: "draft", createdAt: stamp, updatedAt: stamp, paymentLinkCode: null, transactionHash: null },
+  ], address, [{ code: "link-live", title: "Client link", description: "Collect", amount: "0.4", paymentWalletAddress: address, status: "ACTIVE", records: [], createdAt: stamp }]);
+  assert.equal(books.transactions.filter(row => row.type === "RECEIVE").length >= 2, true);
+  assert.equal(books.monthlyFinancials.some(row => row.month === "2026-11" && row.income >= 0.9 && row.expenses === 0.25 && row.payroll === 0.25), true);
+  assert.equal(books.invoiceStats.pendingSent >= 0.5, true);
+  assert.equal(books.payrolls.some(row => row.uuid === "pay-live"), true);
 });
