@@ -36,6 +36,28 @@ export class SeededWorkspaceRepository {
       return true;
     } catch (error) { this.database.exec("ROLLBACK"); throw error; }
   }
+  replace(companyId: string, entityId: WorkspaceEntityId, data: DemoData): boolean {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const existing = this.database.prepare("SELECT revision FROM seeded_workspaces WHERE company_id=? AND entity_id=?").get(companyId, entityId);
+      if (existing) {
+        this.database.prepare("DELETE FROM seeded_workspace_fields WHERE company_id=? AND entity_id=?").run(companyId, entityId);
+        this.database.prepare("DELETE FROM seeded_workspace_sources WHERE company_id=? AND entity_id=?").run(companyId, entityId);
+        this.database.prepare("UPDATE seeded_workspaces SET revision=revision+1,imported_at=? WHERE company_id=? AND entity_id=?").run(new Date().toISOString(), companyId, entityId);
+      } else {
+        this.database.prepare("INSERT INTO seeded_workspaces VALUES(?,?,0,?)").run(companyId, entityId, new Date().toISOString());
+      }
+      for (const [field, value] of Object.entries(data)) {
+        if (!fields.has(field as keyof DemoData)) continue;
+        this.database.prepare("INSERT INTO seeded_workspace_fields VALUES(?,?,?,?)").run(companyId, entityId, field, JSON.stringify(value));
+        if (Array.isArray(value)) for (const record of value) {
+          if (record && typeof record === "object") this.database.prepare("INSERT OR IGNORE INTO seeded_workspace_sources VALUES(?,?,?,?)").run(companyId, entityId, field, String(record.uuid ?? record.id ?? record.code ?? ""));
+        }
+      }
+      this.database.exec("COMMIT");
+      return !existing;
+    } catch (error) { this.database.exec("ROLLBACK"); throw error; }
+  }
   get(companyId: string, entityId: WorkspaceEntityId): SeededWorkspace {
     const entry = this.database.prepare("SELECT revision,imported_at FROM seeded_workspaces WHERE company_id=? AND entity_id=?").get(companyId, entityId);
     if (!entry) throw new Error("Workspace has not been seeded");

@@ -5,6 +5,25 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SeededWorkspaceRepository } from "../services/server/seeded-workspace.ts";
 
+test("replace restores demo staff after an empty workspace seed", () => {
+  const directory = mkdtempSync(join(tmpdir(), "settlbox-restore-"));
+  const data = JSON.parse(readFileSync("public/demo-data-entity-3.json", "utf8"));
+  const empty = { ...data, teamMembers: [], employees: [], clients: [], invoices: [], bills: [], cards: [], cardTransactions: [] };
+  const repository = new SeededWorkspaceRepository(join(directory, "business.sqlite"));
+  try {
+    assert.equal(repository.seed("company", "entity-3", empty), true);
+    assert.equal(repository.get("company", "entity-3").data.employees.length, 0);
+    assert.equal(repository.replace("company", "entity-3", data), false);
+    const restored = repository.get("company", "entity-3").data;
+    assert.equal(restored.teamMembers.length, data.teamMembers.length);
+    assert.equal(restored.employees.length, data.employees.length);
+    assert.equal(restored.clients.length, data.clients.length);
+    assert.equal(restored.invoices.length, data.invoices.length);
+    assert.equal(restored.cards.length, data.cards.length);
+    assert.ok(restored.teamMembers.some(member => member.email === data.teamMembers[0].email));
+  } finally { repository.close(); rmSync(directory, { recursive: true }); }
+});
+
 test("seeded workspaces preserve edits and isolate companies with revision checks", () => {
   const directory = mkdtempSync(join(tmpdir(), "settlbox-seed-"));
   const data = JSON.parse(readFileSync("public/demo-data-entity-3.json", "utf8"));

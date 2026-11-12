@@ -19,6 +19,8 @@ test("provider examples survive reopening without overwriting history or leaking
     assert.equal(repository.get("company-a", "entity-3").yield.apy, 4);
     assert.equal(repository.get("company-a", "primary").yield.apy, 0);
     assert.equal(repository.get("company-b", "entity-3").yield.apy, 0);
+    repository.replace("company-a", "entity-3", { ...history, yield: { ...history.yield, apy: 4.85 } });
+    assert.equal(repository.get("company-a", "entity-3").yield.apy, 4.85);
   } finally { repository.close(); rmSync(directory, { recursive: true, force: true }); }
 });
 

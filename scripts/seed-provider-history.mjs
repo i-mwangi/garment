@@ -4,6 +4,6 @@ import { openProviderHistory } from "../services/server/provider-history.ts";
 
 const repository = openProviderHistory();
 try {
-  repository.seed(readNearTreasuryIdentity().companyId, "entity-3", JSON.parse(readFileSync("public/provider-history.json", "utf8")));
+  repository.replace(readNearTreasuryIdentity().companyId, "entity-3", JSON.parse(readFileSync("public/provider-history.json", "utf8")));
   console.log("Saved provider history without creating bank accounts, deposits or yield positions");
 } finally { repository.close(); }

@@ -138,8 +138,10 @@ function AccountModal({ account, onClose }: {
 export default function GlobalAccountPage() {
     const history = useProviderHistory();
     const live = history.data?.liveCollection;
-    const VIRTUAL_ACCOUNTS = live?.accounts || [];
-    const RECENT_DEPOSITS = live?.deposits || [];
+    const demo = history.data?.globalAccounts;
+    const VIRTUAL_ACCOUNTS = [...(live?.accounts || []), ...(demo?.accounts || [])];
+    const RECENT_DEPOSITS = [...(live?.deposits || []), ...(demo?.deposits || [])];
+    const received30d = Number(live?.received30dUsdc || 0) + (demo?.deposits || []).reduce((sum, row) => sum + row.amount, 0);
     const { setTitle, setShowBackArrow } = useTitle();
     const [modalAccount, setModalAccount] = useState<VirtualAccount | null>(null);
     useEffect(() => {
@@ -150,12 +152,12 @@ export default function GlobalAccountPage() {
       </div>);
         setShowBackArrow(false);
     }, []);
-    return (<div className="flex w-full h-full flex-col overflow-y-auto"><p className="px-6 pt-4 text-sm text-text-secondary">Live NEAR USDC collection. Fiat bank accounts are not issued.</p>{history.error && <p role="alert">{history.error.message}</p>}
+    return (<div className="flex w-full h-full flex-col overflow-y-auto"><p className="px-6 pt-4 text-sm text-text-secondary">Live NEAR USDC collection plus historical virtual-account examples from the production demo.</p>{history.error && <p role="alert">{history.error.message}</p>}
       
       <div className="flex w-full items-start justify-between gap-4 px-6 pt-6 pb-3">
         <div className="flex flex-col gap-0.5">
           <h1 className="text-[26px] font-bold leading-tight tracking-tight text-text-primary">Global Account</h1>
-          <p className="text-[14px] text-text-secondary">Receive native USDC on the company NEAR collection wallet.</p>
+          <p className="text-[14px] text-text-secondary">Receive native USDC on NEAR, with the same USD, EUR, and AED account layout used in production demos.</p>
         </div>
       </div>
 
@@ -166,7 +168,7 @@ export default function GlobalAccountPage() {
             (e.target as HTMLImageElement).style.display = "none";
         }}/>
           <p className="text-xs leading-relaxed text-text-secondary">
-            This account is the workspace NEAR collection wallet. Inbound USDC payment links and invoices settle here. Fiat USD, EUR, and AED virtual accounts are not connected.
+            The first card is the live NEAR collection wallet. The USD, EUR, and AED cards are historical demo accounts and cannot receive funds.
           </p>
         </div>
       </div>
@@ -178,20 +180,20 @@ export default function GlobalAccountPage() {
           <span className="num text-2xl leading-none text-text-primary">{VIRTUAL_ACCOUNTS.length}</span>
         </div>
         <div className="relative flex w-full flex-col gap-3 overflow-hidden rounded-xl border border-primary-divider p-4" style={CARD_BG_STYLE}>
-          <span className="text-sm leading-none text-text-secondary">Network</span>
-          <span className="text-2xl font-semibold leading-none text-text-primary">{live?.networkName || "NEAR"}</span>
+          <span className="text-sm leading-none text-text-secondary">Supported Currencies</span>
+          <span className="text-2xl font-semibold leading-none text-text-primary">USDC, USD, EUR, AED</span>
         </div>
         <div className="relative flex w-full flex-col gap-3 overflow-hidden rounded-xl border border-primary-divider p-4" style={CARD_BG_STYLE}>
-          <span className="text-sm leading-none text-text-secondary">Collection balance</span>
+          <span className="text-sm leading-none text-text-secondary">Total Received (30d)</span>
           <span className="num text-2xl leading-none" style={{ color: "var(--badge-success-text)" }}>
-            {live ? fmtCurrency(Number(live.balanceUsdc), "USDC") : history.isLoading ? "…" : "$0.00"}
+            {history.isLoading ? "…" : fmtCurrency(received30d, "USDC")}
           </span>
         </div>
       </div>
 
       
       <div className="flex flex-col gap-1 px-6 pb-2 pt-3">
-        <span className="text-lg font-semibold text-text-primary">Collection account</span>
+        <span className="text-lg font-semibold text-text-primary">Your Virtual Accounts</span>
         <div className="-mx-1 flex snap-x gap-4 overflow-x-auto px-1 pb-3 pt-2">
           {VIRTUAL_ACCOUNTS.map((account) => (<VirtualCard key={account.id} account={account} onClick={() => setModalAccount(account)}/>))}
         </div>

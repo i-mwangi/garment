@@ -18,6 +18,13 @@ export class ProviderHistoryRepository {
       this.database.exec("COMMIT");
     } catch (error) { this.database.exec("ROLLBACK"); throw error; }
   }
+  replace(company: string, entity: string, history: ProviderHistory) {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      for (const [resource, record] of Object.entries(history)) this.database.prepare("INSERT OR REPLACE INTO provider_history VALUES(?,?,?,?)").run(company, entity, resource, JSON.stringify(record));
+      this.database.exec("COMMIT");
+    } catch (error) { this.database.exec("ROLLBACK"); throw error; }
+  }
   get(company: string, entity: string): ProviderHistory {
     const history: ProviderHistory = { globalAccounts: { accounts: [], deposits: [] }, yield: { apy: 0, monthly: [], activity: [] } };
     for (const row of this.database.prepare("SELECT resource,record FROM provider_history WHERE company_id=? AND entity_id=?").all(company, entity)) {
