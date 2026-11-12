@@ -87,6 +87,12 @@ Desktop.ini
 /contracts/near/integration-token/target/
 
 # Temporary migration audit artifacts; retain locally until verification is complete.
+# Keep markdown local except the root README.
+*.md
+!/README.md
+!/docs/*.md
+
+# Temporary migration audit artifacts; retain locally until verification is complete.
 /scripts/audit-source.py
 /scripts/audit-near-references.py
 /scripts/audit-near-remnants.py
@@ -101,7 +107,3 @@ Desktop.ini
 /docs/REPLICATION-RESULT.json
 /docs/REPLICATION-STATUS.json
 /docs/AUTONOMOUS-BUSINESS-LOCAL-PLAN.md
-
-# Keep markdown local except the root README.
-*.md
-!/README.md
