@@ -112,7 +112,8 @@ financial action can settle.
 The dashboard, Finance agent and manual workflows share server-side
 company-scoped records. The agent proposes supported operations; deterministic
 policy checks, wallet approvals, native contracts and reconciliation determine
-what can complete.
+what can complete. The diagram shows the implemented boundaries rather than
+implying that every provider is configured in every deployment.
 
 ```mermaid
 flowchart TB
@@ -122,14 +123,20 @@ flowchart TB
 
     subgraph App[Settlbox application]
         API[Authenticated API routes and role checks]
+        Chat[Chat orchestration and bounded AI context]
         Planner[Deterministic planner and policy checks]
-        Journal[Payment journals and reconciliation]
+        Proposals[Saved agent proposals and exact preconditions]
+        Journal[Vault payment journal and native submission journal]
         Workers[Schedule, finance, payout and sales workers]
-        Store[(SQLite business records and journals)]
+        Store[(SQLite company records, plans and journals)]
         Private[Private receipts and encrypted credentials]
-        API --> Planner
+        API --> Chat
+        Chat --> Planner
+        Chat --> Proposals
+        Planner --> Proposals
         API --> Journal
         Planner --> Store
+        Proposals --> Store
         Journal --> Store
         Workers --> Journal
         API --> Private
@@ -138,15 +145,99 @@ flowchart TB
 
     UI --> API
     Wallet --> API
+    Chat <-->|Bounded context and proposed operation| AI[Configured AI provider]
     API --> NEAR[Native NEAR RPC and contracts]
     Journal --> NEAR
-    Journal --> Intents[Optional 1Click Intents corridor]
-    API --> Integrations[Optional Sheets, Slack, Stripe and MCP integrations]
+    NEAR --> Vault[Policy-controlled native treasury vault]
+    NEAR --> Token[NEP-141 USDC contract]
+    Vault --> Recipient[Approved recipient]
+    Journal --> Intents[Mainnet-only 1Click Intents corridor]
+    API --> Integrations[Sheets, Slack, Stripe, MCP and sandbox adapters]
 ```
 
-The company wallet, workspace collection account, reserve account and treasury
-vault are separate identities or funding paths where configured. A dashboard
-balance does not automatically represent every asset held by the business.
+**Boundaries:** AI output is not payment authorization. Wallet credentials,
+private keys and server tokens are not supplied to the model or browser.
+Proposals are bound to saved record snapshots and are rejected when the record
+changes after review. The restricted executor can submit only approved native
+contract calls; it cannot approve payments or deploy contracts. The treasury
+vault, company collection account and reserve account are separate identities
+or funding paths where configured. Provider statuses and UI success messages do
+not replace finalized NEAR receipt and event verification.
+
+### Agent payment sequence
+
+This is the implemented native-vault payment path. Manual record entry,
+approved reimbursements, payroll preparation and reviewed imports can create
+the same saved obligation before the Finance conversation begins.
+
+```mermaid
+sequenceDiagram
+    actor User as Business operator
+    participant UI as Finance agent UI
+    participant API as Settlbox server
+    participant AI as Configured AI provider
+    participant DB as SQLite records and journals
+    participant Vault as Native NEAR treasury vault
+    participant Wallet as Web3Auth approver wallet
+    participant Exec as Restricted NEAR executor
+    participant Worker as Finance worker
+    participant Token as NEP-141 USDC contract
+
+    User->>UI: Ask to review a saved payable
+    UI->>API: Authenticated chat request with request ID
+    API->>DB: Read obligation, history, policy and current workflow
+    API->>Vault: Read verified deployment, balance, policy and approvals
+    API->>API: Compute eligible and blocked actions
+    API->>AI: Send bounded context and deterministic plan
+    AI-->>API: Return explanation and supported proposed operation
+    API->>API: Validate operation and bind exact record precondition
+    API->>DB: Save plan, conversation and pending proposal
+    API-->>UI: Show exact payment review
+    User->>UI: Confirm the displayed payment
+    UI->>API: Prepare or resume the payment
+    API->>DB: Reserve exact obligation and source terms
+    API->>Vault: Submit one saved queue_payment call
+    Exec->>Vault: Queue the approved payment
+    Vault-->>API: Return queue transaction identity
+    opt Contract requires human approval
+        API->>Wallet: Prepare native approval challenge
+        Wallet-->>UI: Show secure wallet authorization
+        User->>Wallet: Sign privately
+        Wallet->>Vault: Record approval
+        API->>API: Verify approval receipt and vault state
+    end
+    UI->>API: Reconcile and execute when ready
+    API->>API: Recheck record, policy, balance, lease and stop state
+    API->>Exec: Submit one saved execute_payment call
+    Exec->>Vault: Execute within contract rules
+    Vault->>Token: Transfer exact USDC to approved recipient
+    Token-->>API: Final receipt contains authoritative transfer event
+    Vault-->>API: Final receipt contains payment_executed event and paid state
+    API->>DB: Save verified paid state and transaction hash
+    API-->>UI: Show settlement result and NEAR explorer link
+    Worker->>DB: Reconcile pending or changed payment journals
+    Worker->>API: Execute only already-ready payments within policy
+```
+
+The worker can reconcile and, when explicitly enabled by policy, execute
+already-ready payments within configured limits. It cannot create a human
+signature, bypass a stopped policy, replace an uncertain transaction or submit
+a different payment after a failure. Failed or uncertain native submissions
+remain review-required and retain their original transaction identity.
+
+### Repository map
+
+| Location | Responsibility |
+| --- | --- |
+| `app/agent/` | Finance conversation, payment review, decision summary, automation and audit UI |
+| `app/api/` | Authenticated business, agent, payment, treasury, integration and MCP endpoints |
+| `services/near/` | Native account validation, planning, contract calls, receipt verification and settlement |
+| `services/server/` | Agent orchestration, SQLite persistence, workers, journals, integrations and provider adapters |
+| `contracts/near/` | Native treasury-vault, gift-escrow and token fixture contracts |
+| `scripts/` | Development, production, contract, workspace, seed and verification scripts |
+| `tests/` | Agent, policy, persistence, authorization, recovery, native contract and integration tests |
+| `docs/` | Project setup guides, runbooks and verification history |
+| `.data/` | Private local runtime configuration, databases, uploads and verification artifacts; not source-controlled |
 
 ## Development: clone, configure and run
 
