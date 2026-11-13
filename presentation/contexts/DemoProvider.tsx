@@ -234,6 +234,7 @@ export interface DemoInvoice {
     payrollContractId?: number;
     payrollPeriod?: number;
     recipient?: string;
+    paymentLinkCode?: string | null;
     businessRecordId?: string;
     id: number;
     uuid: string;

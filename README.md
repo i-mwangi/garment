@@ -66,7 +66,6 @@ The repository includes native contract artifacts, sandbox results, provider
 observations and local verification records. These documents describe what was
 actually checked and what remains dependent on external accounts or providers:
 
-- [Native local verification](docs/NEAR-LOCAL-VERIFICATION.json)
 - [Native treasury runbook](docs/NEAR-TREASURY-RUNBOOK.md)
 - [Workflow readiness audit](docs/workflow-readiness-audit.md)
 - [Native contract artifacts](docs/NEAR-CONTRACT-ARTIFACTS.json)

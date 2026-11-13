@@ -30,5 +30,5 @@ export function useYieldHistory() {
 export function useEarnDashboard(){
   const historical=useYieldHistory(),native=useNativeEarn(),data=native.data;
  const live=Boolean(data?.supported);
- return {...historical,error:historical.error,EARN_APR:live && data.apr!==null && data.apr!==undefined?Number(data.apr)*100:historical.EARN_APY,TOTAL_DEPOSITED:live?Number(data.suppliedUsdc):historical.TOTAL_DEPOSITED,AVAILABLE_TO_WITHDRAW:live?Number(data.withdrawableUsdc):historical.AVAILABLE_TO_WITHDRAW,TVL:live?Number(data.poolSuppliedUsdc):historical.TVL,activity:[...(data?.activity||[]),...historical.activity.map(row=>({...row,status:'Historical provider record'}))]};
+  return {...historical,error:historical.error,EARN_APR:live && data?.apr!==null && data?.apr!==undefined?Number(data.apr)*100:historical.EARN_APY,TOTAL_DEPOSITED:live?Number(data?.suppliedUsdc):historical.TOTAL_DEPOSITED,AVAILABLE_TO_WITHDRAW:live?Number(data?.withdrawableUsdc):historical.AVAILABLE_TO_WITHDRAW,TVL:live?Number(data?.poolSuppliedUsdc):historical.TVL,activity:[...(data?.activity||[]),...historical.activity.map(row=>({...row,status:'Historical provider record'}))]};
 }
