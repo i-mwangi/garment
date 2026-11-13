@@ -74,8 +74,12 @@ export class PaymentLinkRepository {
     return { ...link, status: records.length && (link.singleUse || this.isInvoiceLink(code)) ? "DEACTIVATED" : link.status, id: Number(row.id), records: records.map(record => ({ id: Number(record.id), payer: String(record.payer), payerName: null, paymentMethod: "crypto", txid: String(record.hash), createdAt: String(record.created_at), updatedAt: String(record.created_at) })) };
   }
 
-  list(): BusinessPaymentLink[] {
-    return this.database.prepare("SELECT code FROM business_payment_links ORDER BY json_extract(record,'$.order'),id DESC LIMIT 500").all().map(row => this.get(String(row.code))!);
+  list(paymentWalletAddress?: string): BusinessPaymentLink[] {
+    if (paymentWalletAddress) assertNearAccountId(paymentWalletAddress);
+    const rows = paymentWalletAddress
+      ? this.database.prepare("SELECT code FROM business_payment_links WHERE json_extract(record,'$.paymentWalletAddress')=? ORDER BY json_extract(record,'$.order'),id DESC LIMIT 500").all(paymentWalletAddress)
+      : this.database.prepare("SELECT code FROM business_payment_links ORDER BY json_extract(record,'$.order'),id DESC LIMIT 500").all();
+    return rows.map(row => this.get(String(row.code))!);
   }
 
   update(code: string, input: unknown): BusinessPaymentLink {
@@ -146,9 +150,11 @@ export class PaymentLinkRepository {
     if (this.isInvoiceLink(code)) throw new Error("Manage this payment link through its invoice");
   }
 
-  delete(codes: string[]) {
+  delete(codes: string[], paymentWalletAddress?: string) {
+    if (paymentWalletAddress) assertNearAccountId(paymentWalletAddress);
     this.database.exec("BEGIN IMMEDIATE");
     try {
+      if (paymentWalletAddress && codes.some(code => this.get(code)?.paymentWalletAddress !== paymentWalletAddress)) throw new Error("Payment link does not belong to this workspace");
       codes.forEach(code => this.requireIndependentLink(code));
       if (codes.some(code => this.get(code)?.records.length)) throw new Error("Paid links must be deactivated to retain their payment history");
       let deletedCount = 0;
@@ -158,9 +164,14 @@ export class PaymentLinkRepository {
     } catch (error) { this.database.exec("ROLLBACK"); throw error; }
   }
 
-  reorder(ids: number[]) {
+  reorder(ids: number[], paymentWalletAddress?: string) {
+    if (paymentWalletAddress) assertNearAccountId(paymentWalletAddress);
     this.database.exec("BEGIN IMMEDIATE");
     try {
+      if (paymentWalletAddress) {
+        const permitted = new Set(this.list(paymentWalletAddress).map(link => link.id));
+        if (ids.some(id => !permitted.has(id))) throw new Error("Payment link does not belong to this workspace");
+      }
       ids.forEach((id, order) => this.database.prepare("UPDATE business_payment_links SET record=json_set(record,'$.order',?) WHERE id=?").run(order, id));
       this.database.exec("COMMIT");
     } catch (error) { this.database.exec("ROLLBACK"); throw error; }

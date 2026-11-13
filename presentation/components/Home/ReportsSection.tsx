@@ -419,7 +419,7 @@ export const ReportsSection = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <ChartCard title="Monthly Expenses">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyFinancials.map(m => ({ month: m.month, Expenses: m.expenses }))} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                <BarChart data={monthlyFinancials.map(m => ({ month: m.month, Expenses: m.expenses + m.payroll }))} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--primary-divider)"/>
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }}/>
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} tickFormatter={formatAxis}/>
@@ -472,7 +472,7 @@ export const ReportsSection = () => {
             
             <ChartCard title="Income vs Deductible Expenses">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyFinancials.map(m => ({ month: m.month, Income: m.income, Expenses: m.expenses }))} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                <BarChart data={monthlyFinancials.map(m => ({ month: m.month, Income: m.income, Expenses: m.expenses + m.payroll }))} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--primary-divider)"/>
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }}/>
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--text-secondary)", fontSize: 12 }} tickFormatter={formatAxis}/>

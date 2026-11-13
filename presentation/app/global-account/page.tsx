@@ -152,7 +152,7 @@ export default function GlobalAccountPage() {
       </div>);
         setShowBackArrow(false);
     }, []);
-    return (<div className="flex w-full h-full flex-col overflow-y-auto"><p className="px-6 pt-4 text-sm text-text-secondary">Live NEAR USDC collection plus historical virtual-account examples from the production demo.</p>{history.error && <p role="alert">{history.error.message}</p>}
+    return (<div className="flex w-full h-full flex-col overflow-y-auto"><p className="px-6 pt-4 text-sm text-text-secondary">Live NEAR USDC collection plus historical virtual-account examples from the production demo.</p>{history.error && <p role="alert" className="px-6 pt-2 text-sm text-red-600">{history.error.message}</p>}{history.data?.liveCollectionError && <p role="status" className="px-6 pt-2 text-sm text-amber-700">{history.data.liveCollectionError}. Saved history is still shown.</p>}
       
       <div className="flex w-full items-start justify-between gap-4 px-6 pt-6 pb-3">
         <div className="flex flex-col gap-0.5">
@@ -168,7 +168,7 @@ export default function GlobalAccountPage() {
             (e.target as HTMLImageElement).style.display = "none";
         }}/>
           <p className="text-xs leading-relaxed text-text-secondary">
-            The first card is the live NEAR collection wallet. The USD, EUR, and AED cards are historical demo accounts and cannot receive funds.
+            {live ? "The first card is the live NEAR collection wallet. " : "The live NEAR collection wallet is temporarily unavailable. "}The USD, EUR, and AED cards are historical demo accounts and cannot receive funds.
           </p>
         </div>
       </div>

@@ -62,12 +62,11 @@ transfer before the payment link is booked.
 
 ## Verified workflow and evidence
 
-The repository includes native contract artifacts, sandbox results, provider
-observations and local verification records. These documents describe what was
-actually checked and what remains dependent on external accounts or providers:
+The repository includes pinned native contract artifacts and a recorded sandbox
+result. Operational guides distinguish code-level verification from work that
+still depends on an external account, provider or signed transaction:
 
 - [Native treasury runbook](docs/NEAR-TREASURY-RUNBOOK.md)
-- [Workflow readiness audit](docs/workflow-readiness-audit.md)
 - [Native contract artifacts](docs/NEAR-CONTRACT-ARTIFACTS.json)
 - [Sandbox verification result](docs/NEAR-SANDBOX-RESULT.json)
 
@@ -413,9 +412,8 @@ powershell -File scripts/near-contracts.ps1 -Action build
 ```
 
 These commands compile or test locally. They do not deploy contracts, transfer
-assets or establish live end-to-end settlement. Read the
-[workflow readiness audit](docs/workflow-readiness-audit.md) for current
-acceptance checks and external-provider limitations.
+assets or establish live end-to-end settlement. Consult the relevant setup guide
+for acceptance checks and external-provider limitations.
 
 ## Reliability and audit boundaries
 

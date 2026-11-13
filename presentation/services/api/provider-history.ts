@@ -7,7 +7,7 @@ import type { GlobalAccountHistory, LiveCollectionView, YieldHistory } from "@/t
 
 export function useProviderHistory() {
   const { activeEntityId } = useDemo();
-  return useQuery({ queryKey: ["provider-history", activeEntityId], queryFn: () => workspaceFetch<{ globalAccounts: GlobalAccountHistory; yield: YieldHistory; liveCollection?: LiveCollectionView }>(`/api/provider-history?entity=${encodeURIComponent(activeEntityId)}`), staleTime: 0 });
+  return useQuery({ queryKey: ["provider-history", activeEntityId], queryFn: () => workspaceFetch<{ globalAccounts: GlobalAccountHistory; yield: YieldHistory; liveCollection?: LiveCollectionView; liveCollectionError?: string }>(`/api/provider-history?entity=${encodeURIComponent(activeEntityId)}`), staleTime: 0 });
 }
 export function useYieldHistory() {
   const history = useProviderHistory();

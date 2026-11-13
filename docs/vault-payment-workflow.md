@@ -6,4 +6,4 @@ The human reviews and signs required contract approvals through Web3Auth. A sepa
 
 A paid record requires the original signed call, final successful receipt tree, exact NEP-141 transfer, native completion event and final contract state. Submission alone never marks it paid. Failed or unknown outcomes require reconciliation/review; no automatic replacement transfer is created.
 
-See [native treasury runbook](NEAR-TREASURY-RUNBOOK.md) and [verification record](NEAR-LOCAL-VERIFICATION.json). No deployed payment is claimed by these instructions.
+See the [native treasury runbook](NEAR-TREASURY-RUNBOOK.md). No deployed payment is claimed by these instructions.

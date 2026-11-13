@@ -86,11 +86,24 @@ Desktop.ini
 /contracts/near/integration/node_modules/
 /contracts/near/integration-token/target/
 
-# Temporary migration audit artifacts; retain locally until verification is complete.
-# Keep markdown local except the root README.
+# Keep Markdown local unless it is part of the curated product documentation.
 *.md
 !/README.md
-!/docs/*.md
+!/docs/README.md
+!/docs/demo-recording-script.md
+!/docs/fiat-payouts.md
+!/docs/finance-automation.md
+!/docs/finance-chat.md
+!/docs/google-sheets-setup.md
+!/docs/human-wallet-approvals.md
+!/docs/inbound-mcp.md
+!/docs/NEAR-TREASURY-RUNBOOK.md
+!/docs/ROUTE-INVENTORY.md
+!/docs/slack-stripe-setup.md
+!/docs/treasury-vault.md
+!/docs/usyc-integration.md
+!/docs/vault-payment-workflow.md
+!/docs/WINDOWS-CONTRACT-SETUP.md
 
 # Temporary migration audit artifacts; retain locally until verification is complete.
 /scripts/audit-source.py

@@ -14,18 +14,18 @@ Settings → MCP connections supports outbound remote MCP servers using HTTPS St
 
 Bearer credentials use an environment-variable reference, for example SETTLBOX_MCP_ACCOUNTING_TOKEN; secrets are not stored in settings or chat. Only public port 443 endpoints are supported. Private, loopback, metadata and reserved addresses, redirects, URL credentials and query-string secrets are rejected. DNS results are validated and pinned. Payload sizes, schema complexity and request durations are bounded. Calls recheck enablement before submission.
 
-This is an MCP client, not an inbound Settlbox MCP server. Local stdio and OAuth authorization are not supported. No customer external endpoint has been supplied for a live integration test; protocol and permission checks use an isolated fixture.
+Settlbox has two separate MCP boundaries. The outbound client described above connects to owner-approved remote tools. The authenticated inbound endpoint at `/api/mcp` lets an external assistant read scoped records or create reviewable proposals. Inbound requests cannot approve, queue or execute payments. Local stdio and OAuth authorization are not supported. Protocol and permission tests use isolated fixtures; that does not prove a customer endpoint is connected.
 
 ## Configuration and limits
 
-Azure uses server-side environment configuration. The configured deployment is settlbox-finance-chat; the public example contains no credentials. Azure produces structured proposals with no side-effect tools. Missing details require clarification; arbitrary URLs, shell commands and invented financial IDs are rejected.
+The selected AI provider uses server-side environment configuration. An owner can select Azure when NEAR AI Cloud is unavailable or has no credits; the server does not silently bypass an owner-set NEAR AI budget by switching providers. Provider output is advisory: structured operations are validated, saved and presented for review before existing application handlers can apply them. Missing details require clarification; arbitrary URLs, shell commands and invented financial IDs are rejected.
 
 The catalog does not cover every application feature. Initial Web3Auth wallet setup and ownership migration retain dedicated controls. Finance chat accepts PNG/JPEG receipt attachments up to 2 MB through the existing authenticated, company-scoped upload service. Receipt metadata accompanies the request; this does not extract or verify the image's financial contents. A reimbursement still requires exact user-supplied terms and confirmation. Card issuance, fiat banking, global accounts, on/off ramps and email delivery require actual provider adapters and credentials. Native Rhea reserve actions require the dedicated Earn review flow, actual token support and an approved provider identity. The payment vault cannot be invested. Historical records do not prove live provider support or spendable funds.
 
-Verification records belong in workflow-readiness-audit.md. An untested interface must not be described as a completed live financial journey.
+Automated tests and local builds verify code behavior, not provider availability or a completed live financial journey.
 
 ## Kora sandbox payouts
 
 Finance chat now supports Kora destination discovery, saved recipient creation and resolution, local-currency payout preparation, separately confirmed sandbox submission, status checks and cancellation of unsubmitted drafts. Every step opens the existing action review; submission displays the exact saved recipient snapshot and local amount. KES, NGN and GHS are separate from native NEAR USDC. Sandbox success never pays a real business obligation. Full account numbers and emails are omitted from saved-result model context; exact details remain visible to the owner during review.
 
-Settings → Fiat payouts configures the company's test-key environment references. Cashout uses the same recipient directory and payout journal. Real provider sandbox submissions reached verified sandbox success in all three markets. Live payouts and NEAR-to-fiat funding are not enabled. See [fiat-payouts.md](fiat-payouts.md) for provider constraints and verification details.
+Settings → Fiat payouts configures the company's test-key environment references. Cashout uses the same recipient directory and payout journal. Sandbox behavior requires valid provider credentials and must not be presented as a live payout. Live payouts and NEAR-to-fiat funding are not enabled. See [fiat-payouts.md](fiat-payouts.md) for provider constraints.

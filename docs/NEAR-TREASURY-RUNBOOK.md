@@ -1,6 +1,6 @@
 # Native treasury implementation and setup
 
-Native treasury, direct payment APIs, business-record payment actions, gifts, human approvals, ownership transfer and the Rhea Earn adapter are implemented. Native receipts and pinned deployment identities replace the old settlement implementations. All six native contract sandbox scenarios passed against the pinned artifacts. The testnet treasury contract is deployed and its code, token, owner and executor match the approved binding. The gift account does not exist yet. The vault is paused, has no approver and holds no USDC, so a payment cannot settle until the owner wallet finishes those steps.
+Native treasury handlers, business-record payment actions, human approvals, ownership transfer and the guarded Rhea adapter are implemented. Runtime availability is determined from the local binding and fresh chain reads; this guide does not assume that a deployment is funded, active or authorized. Gift deployment is optional and separately configured. The recorded sandbox result covers contract scenarios against pinned artifacts, not a live public-network payment.
 
 ## Contract bindings
 
@@ -24,7 +24,7 @@ Settlement requires the original saved hash, exact executor call, authoritative 
 
 ## Verification
 
-Run `npm run typecheck` and `npm run test:near`. Windows contract checks use `scripts/near-contracts.ps1`; the contract build entry points now compile Rust/WASM instead of Solidity. Sandbox callbacks and 500-recipient/1,000-request capacity passed; public deployment and live UI transaction checks remain required. Per the requested sequence, remote execution is deferred until the code migration and local checks are complete.
+Run `npm run typecheck`, `npm test`, `npm run test:near` and `npm run build`. Windows contract checks use `scripts/near-contracts.ps1`. These checks validate source behavior and packaging. Public deployment, current permissions, funding and a live UI transaction require separate verification against fresh chain state.
 
 ## Native deployment commands
 
@@ -39,12 +39,6 @@ Deployment hashes and signed bytes are persisted before broadcast. Uncertain res
 `/api/earn/near` reads Rhea pool and reserve positions against the configured native USDC contract. Supply uses NEP-141 `ft_transfer_call`; withdrawal uses Rhea's native `execute` action with the provider's extra internal decimals. The payment vault cannot be invested. Each action is reviewed and signed by the reserve account through Web3Auth. A provider or token storage registration is a separate reviewed transaction, followed by another review for the actual supply/withdrawal.
 
 Run `node --env-file-if-exists=.env.local --experimental-strip-types scripts/prepare-near-earn.mjs` to observe provider support and deployed code. Only a separately supplied `--approve-code=HASH` saves the matching local binding, and unsupported native USDC is rejected. No code hash or support is assumed. This command does not transfer tokens. Rhea lending rates and liquidity are variable; imported historical yield records do not establish a native position.
-
-## Code and data audit
-
-The current static runtime audit reports zero legacy blockchain patterns in application code. Original migration records and imported historical fixtures stay local and are not part of the published tree. Web3Auth's provider property names and transitive dependencies can still mention Ethereum; native transaction construction and settlement use NEAR.
-
-Every original source file is accounted for in `REPLICATION-STATUS.json`, including explicit replacements. Copy/hash accounting and successful compilation do not establish visual parity for every interaction. See `NEAR-LOCAL-VERIFICATION.json` for current command results and remaining verification boundaries.
 
 ## Observed provider compatibility
 

@@ -12,8 +12,12 @@ export async function GET(request: Request) {
     const identity = readNearTreasuryIdentity();
     const entity = workspaceEntity(new URL(request.url).searchParams.get("entity") || "entity-3");
     const history = repository.get(identity.companyId, entity);
-    const liveCollection = await readLiveCollection(identity);
-    return Response.json({ ...history, liveCollection }, { headers: { "Cache-Control": "no-store" } });
+    try {
+      const liveCollection = await readLiveCollection(identity);
+      return Response.json({ ...history, liveCollection }, { headers: { "Cache-Control": "no-store" } });
+    } catch {
+      return Response.json({ ...history, liveCollectionError: "Live NEAR collection data is temporarily unavailable" }, { headers: { "Cache-Control": "no-store" } });
+    }
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "History is unavailable" }, { status: 400 }); }
   finally { repository.close(); }
 }

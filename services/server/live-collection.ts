@@ -48,7 +48,7 @@ export async function readLiveCollection(identity: ReturnType<typeof readNearTre
   try {
     const seen = new Set<string>();
     const deposits: GlobalAccountHistory["deposits"] = [];
-    for (const link of links.list()) {
+    for (const link of links.list(identity.accountId)) {
       for (const payment of link.records) {
         if (seen.has(payment.txid)) continue;
         seen.add(payment.txid);

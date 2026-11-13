@@ -1,6 +1,6 @@
 # Finance automation
 
-The worker manages eligible vault payments and reconciles their settlement. See [workflow verification history](workflow-readiness-audit.md) for dated live results.
+The worker manages eligible vault payments and reconciles their settlement. Automated tests cover policy, persistence and recovery behavior; a configured runner and finalized chain receipts are still required for live operation.
 
 Automation starts stopped. Company owners can enable or stop it in Settings → Finance controls. Each cycle reconciles existing requests and attempts execution only for payments ready on-chain. Optional automatic queueing creates a fresh plan for obligations due by the current date in Africa/Nairobi. Azure provides advisory review; deterministic policy and the contract determine eligibility. The worker cannot sign human approvals or administer the vault.
 

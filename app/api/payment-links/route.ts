@@ -1,5 +1,6 @@
 import { requireOperatorSession, requireSameOrigin } from "@/services/server/operator-session";
 import { openPaymentLinks } from "@/services/server/payment-links";
+import { readNearTreasuryIdentity } from "@/services/server/near-treasury-config";
 
 export const runtime = "nodejs";
 
@@ -7,7 +8,7 @@ export async function GET(request: Request) {
   try { requireOperatorSession(request); }
   catch { return Response.json({ error: "Operator sign-in is required" }, { status: 401 }); }
   const repository = openPaymentLinks();
-  try { return Response.json(repository.list()); }
+  try { return Response.json(repository.list(readNearTreasuryIdentity().accountId)); }
   finally { repository.close(); }
 }
 
@@ -15,7 +16,11 @@ export async function POST(request: Request) {
   try { requireOperatorSession(request); requireSameOrigin(request); }
   catch { return Response.json({ error: "Operator sign-in is required" }, { status: 401 }); }
   const repository = openPaymentLinks();
-  try { return Response.json(repository.create(await request.json()), { status: 201 }); }
+  try {
+    const input = await request.json();
+    if (!input || typeof input !== "object" || input.paymentWalletAddress !== readNearTreasuryIdentity().accountId) throw new Error("Payment links must collect into this workspace account");
+    return Response.json(repository.create(input), { status: 201 });
+  }
   catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Payment link was not created" }, { status: 400 }); }
   finally { repository.close(); }
 }
@@ -27,7 +32,7 @@ export async function DELETE(request: Request) {
   try {
     const codes: unknown = await request.json();
     if (!Array.isArray(codes) || codes.length > 500 || !codes.every(code => typeof code === "string")) throw new Error("Payment link codes are required");
-    const deletedCount = repository.delete(codes);
+    const deletedCount = repository.delete(codes, readNearTreasuryIdentity().accountId);
     return Response.json({ message: "Payment links deleted", deletedCount });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Payment links were not deleted" }, { status: 400 }); }
   finally { repository.close(); }
@@ -40,7 +45,7 @@ export async function PATCH(request: Request) {
   try {
     const body: unknown = await request.json();
     if (typeof body !== "object" || body === null || !("linkIds" in body) || !Array.isArray(body.linkIds) || body.linkIds.length > 500 || !body.linkIds.every(Number.isSafeInteger)) throw new Error("Payment link IDs are required");
-    repository.reorder(body.linkIds);
+    repository.reorder(body.linkIds, readNearTreasuryIdentity().accountId);
     return Response.json({ message: "Payment link order saved" });
   } catch { return Response.json({ error: "Payment link order was not saved" }, { status: 400 }); }
   finally { repository.close(); }

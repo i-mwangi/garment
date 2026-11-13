@@ -11,6 +11,7 @@ import { EmployeeAvatar } from "../Common/EmployeeAvatar";
 import TeamSidebar from "./TeamSidebar";
 import EntitySwitcher from "./EntitySwitcher";
 import { SidebarCollapse, SidebarExpand } from "iconoir-react";
+import { useAuth } from "@/presentation/services/auth/context";
 export const MOVE_CRYPTO_SIDEBAR_OFFSET = 238;
 interface NavProps {
     onActionItemClick?: (itemIndex: number) => void;
@@ -195,6 +196,7 @@ export const actionItems = [
 ];
 export const Sidebar: React.FC<NavProps> = ({ onActionItemClick, collapsed = false, onToggleCollapse }) => {
     const { data, entities, activeEntityId, switchEntity } = useDemo();
+    const { logout } = useAuth();
     const [action, setActions] = useState(actionItems);
     const router = useRouter();
     const pathname = usePathname();
@@ -302,7 +304,7 @@ export const Sidebar: React.FC<NavProps> = ({ onActionItemClick, collapsed = fal
           <Tooltip id="account-tooltip" clickable style={{ zIndex: 20, borderRadius: "16px", padding: "0" }} place="top" openOnClick noArrow border="none" opacity={1} render={({ content }) => {
             if (!content)
                 return null;
-            return <AccountTooltip onLogout={async () => { }}/>;
+            return <AccountTooltip onLogout={() => { void logout(); }}/>;
         }}/>
         </div>
       </nav>

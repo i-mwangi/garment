@@ -67,6 +67,19 @@ test("payment link validation rejects invalid recipients and nonpositive amounts
   assert.throws(() => validatePaymentLink({ ...details, paymentWalletAddress: `0x${"0".repeat(40)}` }));
 });
 
+test("workspace payment-link administration is limited to its collection account", () => {
+  const repository = new PaymentLinkRepository(":memory:");
+  try {
+    const company = repository.create(details);
+    const other = repository.create({ ...details, paymentWalletAddress: "other.testnet" });
+    assert.deepEqual(repository.list("company.testnet").map(link => link.code), [company.code]);
+    assert.deepEqual(repository.list("other.testnet").map(link => link.code), [other.code]);
+    assert.throws(() => repository.delete([other.code], "company.testnet"), /does not belong/);
+    assert.throws(() => repository.reorder([other.id], "company.testnet"), /does not belong/);
+    assert.equal(repository.get(other.code)?.paymentWalletAddress, "other.testnet");
+  } finally { repository.close(); }
+});
+
 test("inactive or changed links cannot accept a newly verified receipt", () => {
   const repository = new PaymentLinkRepository(":memory:");
   try {
