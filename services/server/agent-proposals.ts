@@ -48,7 +48,10 @@ export class AgentProposalRepository {
     }
     for (const expired of this.list(company, principal).filter(item => item.status === "pending" && Date.parse(item.expiresAt) <= Date.now())) this.cancel(company, principal, expired.id);
     const outstanding = this.db.prepare("SELECT record FROM agent_proposals WHERE company=? AND principal=? AND state IN ('pending','running','awaiting_signature','uncertain')").all(company, principal).map(row => JSON.parse(String(row.record)) as AgentProposal);
-    const unresolved = outstanding.find(item => JSON.stringify(item.operation) === JSON.stringify(operation));
+    // Never reuse an expired review. In particular, an awaiting_signature
+    // proposal may remain in the journal after its wallet challenge expires;
+    // returning it would make every retry show the same expired dialog.
+    const unresolved = outstanding.find(item => Date.parse(item.expiresAt) > Date.now() && JSON.stringify(item.operation) === JSON.stringify(operation));
     if (unresolved) return this.withTimeline(company, principal, unresolved);
     if (outstanding.length >= 100) throw new Error("Resolve or dismiss pending reviews before preparing more actions");
     const record: AgentProposal = { id: randomUUID(), turnId, operation, before, status: "pending", createdAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 15 * 60000).toISOString() };
