@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parseAmount } from "../near/amount.ts";
+import { assertNearAccountId } from "../near/account-id.ts";
 
 export type BusinessBudgetKind = "treasury" | "inference";
 export interface BusinessPolicy {
@@ -12,6 +13,8 @@ export interface BusinessPolicy {
   maxSinglePaymentUsdc: string;
   maxDailyTreasuryUsdc: string;
   maxDailyInferenceUsd: string;
+  revenueSharingEnabled: boolean;
+  revenueShareRecipients: { accountId: string; label: string; basisPoints: number }[];
   revision: number;
 }
 
@@ -23,6 +26,8 @@ const initialPolicy: BusinessPolicy = {
   maxSinglePaymentUsdc: "0",
   maxDailyTreasuryUsdc: "0",
   maxDailyInferenceUsd: "0",
+  revenueSharingEnabled: false,
+  revenueShareRecipients: [],
   revision: 0,
 };
 
@@ -35,14 +40,29 @@ function amount(value: unknown, name: string): string {
 export function validateBusinessPolicy(value: unknown): Omit<BusinessPolicy, "revision"> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Business policy is required");
   const input = value as Record<string, unknown>;
-  const fields = ["stopped", "allowAutonomousDrafts", "allowAutonomousPayments", "maxSinglePaymentUsdc", "maxDailyTreasuryUsdc", "maxDailyInferenceUsd"];
-  if (Object.keys(input).length < fields.length || Object.keys(input).length > fields.length + 1 || Object.keys(input).some(key => ![...fields, "aiProvider"].includes(key)) || fields.some(key => !(key in input))) throw new Error("Complete business policy settings are required");
+  const required = ["stopped", "allowAutonomousDrafts", "allowAutonomousPayments", "maxSinglePaymentUsdc", "maxDailyTreasuryUsdc", "maxDailyInferenceUsd"];
+  const allowed = [...required, "revenueSharingEnabled", "revenueShareRecipients", "aiProvider"];
+  if (Object.keys(input).length < required.length || Object.keys(input).length > allowed.length || Object.keys(input).some(key => !allowed.includes(key)) || required.some(key => !(key in input))) throw new Error("Complete business policy settings are required");
   if (input.aiProvider !== undefined && input.aiProvider !== "azure" && input.aiProvider !== "near_ai") throw new Error("Unsupported AI provider");
-  for (const key of fields.slice(0, 3)) if (typeof input[key] !== "boolean") throw new Error(`${key} must be a boolean`);
+  for (const key of ["stopped", "allowAutonomousDrafts", "allowAutonomousPayments"]) if (typeof input[key] !== "boolean") throw new Error(`${key} must be a boolean`);
+  if (input.revenueSharingEnabled !== undefined && typeof input.revenueSharingEnabled !== "boolean") throw new Error("revenueSharingEnabled must be a boolean");
   const single = amount(input.maxSinglePaymentUsdc, "Single payment limit");
   const treasury = amount(input.maxDailyTreasuryUsdc, "Daily treasury limit");
   const inference = amount(input.maxDailyInferenceUsd, "Daily inference limit");
   if (parseAmount(single, 6) > parseAmount(treasury, 6)) throw new Error("Single payment limit exceeds the daily treasury limit");
+  if (input.revenueShareRecipients !== undefined && !Array.isArray(input.revenueShareRecipients)) throw new Error("Revenue share recipients must be a list");
+  const rawRecipients = (input.revenueShareRecipients || []) as unknown[];
+  if (rawRecipients.length > 20) throw new Error("Revenue sharing supports up to 20 recipients");
+  const recipients = rawRecipients.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error(`Revenue share recipient ${index + 1} is invalid`);
+    const recipient = entry as Record<string, unknown>;
+    if (Object.keys(recipient).some(key => !["accountId", "label", "basisPoints"].includes(key)) || typeof recipient.accountId !== "string" || typeof recipient.label !== "string" || !recipient.label.trim() || recipient.label.length > 80 || !Number.isSafeInteger(recipient.basisPoints) || Number(recipient.basisPoints) < 1 || Number(recipient.basisPoints) > 10000) throw new Error(`Revenue share recipient ${index + 1} is incomplete`);
+    assertNearAccountId(recipient.accountId);
+    return { accountId: recipient.accountId, label: recipient.label.trim(), basisPoints: Number(recipient.basisPoints) };
+  });
+  if (new Set(recipients.map(recipient => recipient.accountId)).size !== recipients.length) throw new Error("Revenue share recipients must be unique");
+  if (recipients.reduce((sum, recipient) => sum + recipient.basisPoints, 0) > 10000) throw new Error("Revenue share percentages cannot exceed 100%");
+  if (input.revenueSharingEnabled === true && recipients.length === 0) throw new Error("Enable revenue sharing only after adding a recipient");
   return {
     aiProvider: (input.aiProvider as BusinessPolicy["aiProvider"] | undefined) ?? "azure",
     stopped: input.stopped as boolean,
@@ -51,6 +71,8 @@ export function validateBusinessPolicy(value: unknown): Omit<BusinessPolicy, "re
     maxSinglePaymentUsdc: single,
     maxDailyTreasuryUsdc: treasury,
     maxDailyInferenceUsd: inference,
+    revenueSharingEnabled: input.revenueSharingEnabled === true,
+    revenueShareRecipients: recipients,
   };
 }
 

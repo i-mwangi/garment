@@ -234,6 +234,13 @@ signature, bypass a stopped policy, replace an uncertain transaction or submit
 a different payment after a failure. Failed or uncertain native submissions
 remain review-required and retain their original transaction identity.
 
+Each worker cycle preserves business causality: it reconciles NEAR Intents
+first, records verified invoice sales second, creates any owner-configured
+revenue-share obligations third, and only then asks the guarded Finance worker
+to plan or execute eligible payables. Revenue-share terms are snapshotted per
+sale, use exact integer USDC arithmetic, and cannot be created, edited or
+cancelled by chat or MCP clients.
+
 ### Repository map
 
 | Location | Responsibility |
@@ -369,6 +376,7 @@ before they can be exercised locally or on a live network:
 | --- | --- |
 | Finance agent | Set the selected AI provider and its server-only credentials. See [Finance chat](docs/finance-chat.md). |
 | Native treasury | Prepare bindings, policy and restricted executor permissions. See [the treasury runbook](docs/NEAR-TREASURY-RUNBOOK.md). |
+| Revenue sharing | Configure recipients and exact percentages in Finance agent policy. It is disabled by default; verified invoice sales create immutable payables that still require vault allowlisting, limits and native approvals. |
 | NEAR Intents checkout | Requires mainnet, `SETTLBOX_BASE_USDC_CHECKOUT_ENABLED=true`, `SETTLBOX_1CLICK_JWT` and `FASTNEAR_API_KEY`. It is disabled by default and has no testnet swap path. |
 | Google Sheets | Configure OAuth credentials, encryption and the exact callback URI. See [Sheets setup](docs/google-sheets-setup.md). |
 | Slack and Stripe | Configure the server-only provider credentials. See [Slack and Stripe setup](docs/slack-stripe-setup.md). |

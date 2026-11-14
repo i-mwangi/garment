@@ -1,6 +1,6 @@
 import type { PaymentStatus } from "./finance";
 
-export type BusinessRecordKind = "invoice" | "bill" | "payroll" | "reimbursement";
+export type BusinessRecordKind = "invoice" | "bill" | "payroll" | "reimbursement" | "revenue_share";
 export type BusinessRecordStatus = "draft" | "issued" | "cancelled" | "paid" | PaymentStatus;
 
 export interface BusinessRecordInput {
@@ -16,6 +16,7 @@ export interface BusinessRecordInput {
 }
 
 export interface BusinessRecord extends BusinessRecordInput {
+  revenueShare?: { saleInvoiceId: string; basisPoints: number; policyRevision: number };
   supplierQuoteApproval?: { approvedBy: string; approvedAt: string; fingerprint: string };
   scheduleId?: string;
   id: string;

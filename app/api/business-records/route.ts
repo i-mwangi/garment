@@ -25,6 +25,7 @@ export async function POST(request: Request) {
   try {
     const config = readNearTreasuryIdentity();
     const body: unknown = await request.json();
+    if (typeof body === "object" && body !== null && "kind" in body && body.kind === "revenue_share") throw new Error("Revenue shares are created only from verified sales and owner policy");
     if (typeof body === "object" && body !== null && "kind" in body && body.kind === "invoice" && "recipient" in body && body.recipient !== config.accountId) throw new Error("Invoices must collect into the company treasury wallet");
     return Response.json(repository.create(config.companyId, body, request.headers.get("Idempotency-Key") || undefined), { status: 201 });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Business record was not created" }, { status: 400 }); }

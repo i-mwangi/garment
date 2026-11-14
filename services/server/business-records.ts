@@ -8,6 +8,8 @@ import type { BusinessRecord, BusinessRecordInput, BusinessRecordStatus } from "
 import type { PaymentSchedule, ScheduleStatus } from "../../types/recurring-payment";
 import { nextPaymentDate, scheduledRecordId, validateCalendarDate, validatePaymentSchedule } from "./payment-schedules.ts";
 import type { VaultPayment } from "./vault-payment-journal.ts";
+import type { BusinessPolicy } from "./business-policy.ts";
+import { formatAmount } from "../near/amount.ts";
 
 export interface VerifiedSaleEvent {
   companyId: string;
@@ -38,7 +40,7 @@ export interface BusinessTimelineEvent {
 export function validateBusinessRecord(value: unknown): BusinessRecordInput {
   if (typeof value !== "object" || value === null) throw new Error("Business record is required");
   const input = value as Record<string, unknown>;
-  if (input.kind !== "invoice" && input.kind !== "bill" && input.kind !== "payroll" && input.kind !== "reimbursement") throw new Error("Invalid business record type");
+  if (input.kind !== "invoice" && input.kind !== "bill" && input.kind !== "payroll" && input.kind !== "reimbursement" && input.kind !== "revenue_share") throw new Error("Invalid business record type");
   for (const key of ["title", "counterparty", "description", "dueDate", "amount", "recipient"]) if (typeof input[key] !== "string") throw new Error(`${key} is required`);
   if (!String(input.title).trim() || String(input.title).length > 160 || !String(input.counterparty).trim() || String(input.counterparty).length > 160 || String(input.description).length > 4000) throw new Error("Invalid title, counterparty, or description");
   assertNearAccountId(String(input.recipient));
@@ -88,6 +90,11 @@ export class BusinessRecordRepository {
       settled_at TEXT NOT NULL, recorded_at TEXT NOT NULL,
       PRIMARY KEY(company_id,invoice_id));
       CREATE INDEX IF NOT EXISTS business_sale_event_listing ON business_sale_events(company_id,settled_at);`);
+    this.database.exec(`CREATE TABLE IF NOT EXISTS business_revenue_share_allocations(
+      company_id TEXT NOT NULL, invoice_id TEXT NOT NULL, transaction_hash TEXT NOT NULL,
+      policy_revision INTEGER NOT NULL, policy_snapshot TEXT NOT NULL, record_ids TEXT NOT NULL,
+      created_at TEXT NOT NULL, PRIMARY KEY(company_id,invoice_id));
+      CREATE INDEX IF NOT EXISTS business_revenue_share_listing ON business_revenue_share_allocations(company_id,created_at);`);
     this.database.exec(`CREATE TABLE IF NOT EXISTS business_payout_events(
       company_id TEXT NOT NULL, record_id TEXT NOT NULL, transaction_hash TEXT NOT NULL UNIQUE,
       amount_units TEXT NOT NULL, network_id TEXT NOT NULL, token_contract_id TEXT NOT NULL,
@@ -114,7 +121,12 @@ export class BusinessRecordRepository {
   }
 
   create(companyId: string, input: unknown, requestId?: string): BusinessRecord {
+    return this.insert(companyId, input, requestId, false);
+  }
+
+  private insert(companyId: string, input: unknown, requestId: string | undefined, generated: boolean): BusinessRecord {
     const details = validateBusinessRecord(input);
+    if (details.kind === "revenue_share" && !generated) throw new Error("Revenue shares can only be generated from a verified sale and owner policy");
     if (requestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) throw new Error("A valid request ID is required");
     const now = new Date().toISOString();
     const record: BusinessRecord = { ...details, id: requestId || randomUUID(), companyId, status: "draft", paymentLinkCode: null, transactionHash: null, createdAt: now, updatedAt: now };
@@ -232,7 +244,7 @@ export class BusinessRecordRepository {
   updateDraft(companyId: string, id: string, input: unknown): BusinessRecord {
     const details = validateBusinessRecord(input);
     const record = this.get(companyId, id);
-    if (!record || record.status !== "draft" || record.kind !== details.kind) throw new Error("Only draft records can be edited");
+    if (!record || record.status !== "draft" || record.kind !== details.kind || record.kind === "revenue_share") throw new Error("Only user-created draft records can be edited");
     const sameTerms = JSON.stringify(validateBusinessRecord(record)) === JSON.stringify(details);
     const next = { ...record, ...details, supplierQuoteApproval: sameTerms ? record.supplierQuoteApproval : undefined, updatedAt: new Date().toISOString() };
     const result = this.database.prepare("UPDATE business_records SET record=? WHERE id=? AND company_id=? AND record=?").run(JSON.stringify(next), id, companyId, JSON.stringify(record));
@@ -293,6 +305,51 @@ export class BusinessRecordRepository {
     return this.database.prepare("SELECT company_id AS companyId,invoice_id AS invoiceId,transaction_hash AS transactionHash,amount_units AS amountUnits,network_id AS networkId,token_contract_id AS tokenContractId,settled_at AS settledAt,recorded_at AS recordedAt FROM business_sale_events WHERE company_id=? ORDER BY settled_at DESC,invoice_id DESC LIMIT 500").all(companyId) as unknown as VerifiedSaleEvent[];
   }
 
+  materializeRevenueShares(companyId: string, sale: VerifiedSaleEvent, policy: BusinessPolicy): BusinessRecord[] {
+    if (sale.companyId !== companyId) throw new Error("Sale belongs to another company");
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const existing = this.database.prepare("SELECT transaction_hash,record_ids FROM business_revenue_share_allocations WHERE company_id=? AND invoice_id=?").get(companyId, sale.invoiceId);
+      if (existing) {
+        if (existing.transaction_hash !== sale.transactionHash) throw new Error("Revenue share allocation belongs to different sale evidence");
+        const records = (JSON.parse(String(existing.record_ids)) as string[]).map(id => this.get(companyId, id));
+        if (records.some(record => !record)) throw new Error("Revenue share allocation is incomplete");
+        this.database.exec("COMMIT");
+        return records as BusinessRecord[];
+      }
+      const snapshot = { enabled: policy.revenueSharingEnabled, recipients: policy.revenueShareRecipients, policyRevision: policy.revision };
+      const records: BusinessRecord[] = [];
+      if (policy.revenueSharingEnabled) {
+        const gross = BigInt(sale.amountUnits);
+        for (const recipient of policy.revenueShareRecipients) {
+          const units = gross * BigInt(recipient.basisPoints) / 10000n;
+          if (units === 0n) continue;
+          const digest = createHash("sha256").update(`${companyId}:${sale.invoiceId}:${recipient.accountId}:${recipient.basisPoints}:${policy.revision}`).digest("hex");
+          const id = `${digest.slice(0,8)}-${digest.slice(8,12)}-4${digest.slice(13,16)}-8${digest.slice(17,20)}-${digest.slice(20,32)}`;
+          let record = this.insert(companyId, { kind: "revenue_share", title: `Revenue share from sale ${sale.invoiceId.slice(0, 8)}`, counterparty: recipient.label,
+            recipient: recipient.accountId, amount: formatAmount(units), dueDate: sale.settledAt.slice(0, 10), description: `Policy-defined ${recipient.basisPoints / 100}% share of verified sale ${sale.invoiceId}` }, id, true);
+          const revenueShare = { saleInvoiceId: sale.invoiceId, basisPoints: recipient.basisPoints, policyRevision: policy.revision };
+          this.database.prepare("UPDATE business_records SET record=json_set(record,'$.revenueShare',json(?)) WHERE id=? AND company_id=?").run(JSON.stringify(revenueShare), record.id, companyId);
+          record = { ...record, revenueShare };
+          records.push(record);
+        }
+      }
+      this.database.prepare("INSERT INTO business_revenue_share_allocations VALUES(?,?,?,?,?,?,?)").run(companyId, sale.invoiceId, sale.transactionHash, policy.revision, JSON.stringify(snapshot), JSON.stringify(records.map(record => record.id)), new Date().toISOString());
+      this.database.exec("COMMIT");
+      return records;
+    } catch (error) { this.database.exec("ROLLBACK"); throw error; }
+  }
+
+  listRevenueShareAllocations(companyId: string) {
+    return this.database.prepare("SELECT invoice_id AS invoiceId,transaction_hash AS saleTransactionHash,policy_revision AS policyRevision,policy_snapshot AS policySnapshot,record_ids AS recordIds,created_at AS createdAt FROM business_revenue_share_allocations WHERE company_id=? ORDER BY created_at DESC LIMIT 500").all(companyId).map(row => ({
+      invoiceId: String(row.invoiceId), saleTransactionHash: String(row.saleTransactionHash), policyRevision: Number(row.policyRevision), policy: JSON.parse(String(row.policySnapshot)),
+      records: (JSON.parse(String(row.recordIds)) as string[])
+        .map(id => this.get(companyId, id))
+        .filter((record): record is BusinessRecord => record !== undefined),
+      createdAt: String(row.createdAt),
+    }));
+  }
+
   recordVerifiedVaultPayout(companyId: string, recordId: string, paymentId: string, hash: string, tokenContractId: string): BusinessRecord {
     if (!isNearTransactionHash(hash)) throw new Error("A native NEAR transaction hash is required");
     assertNearAccountId(tokenContractId);
@@ -329,6 +386,7 @@ export class BusinessRecordRepository {
     try {
       const record = this.get(companyId, id);
       if (!record || !["draft", "issued"].includes(record.status)) throw new Error("Only unpaid drafts or issued invoices can be cancelled");
+      if (record.kind === "revenue_share") throw new Error("Revenue-share obligations are bound to verified sale policy");
       if (record.paymentLinkCode) {
         if (this.database.prepare("SELECT 1 FROM business_link_payments WHERE code=? LIMIT 1").get(record.paymentLinkCode)) throw new Error("A settled invoice cannot be cancelled");
         this.database.prepare("UPDATE business_payment_links SET record=json_set(record,'$.status','DEACTIVATED') WHERE code=?").run(record.paymentLinkCode);

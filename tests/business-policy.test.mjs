@@ -20,11 +20,24 @@ test('policy starts stopped and rejects spending until an owner changes it', () 
     assert.equal(store.get('company-a').stopped, true);
     assert.equal(store.get('company-a').aiProvider, 'azure');
     assert.equal(store.get('company-a').maxDailyTreasuryUsdc, '0');
+    assert.equal(store.get('company-a').revenueSharingEnabled, false);
     assert.throws(() => store.reserve('company-a', 'payment-1', 'treasury', '1', 1), /stopped or changed/);
     assert.throws(() => store.update('company-a', { ...enabled, maxSinglePaymentUsdc: '6' }, 0, 'owner'), /exceeds/);
     assert.throws(() => store.update('company-a', { ...enabled, extra: true }, 0, 'owner'), /Complete/);
     assert.throws(() => store.update('company-a', { ...enabled, aiProvider: 'unknown' }, 0, 'owner'), /AI provider/);
     assert.equal(store.update('company-a', { ...enabled, aiProvider: 'near_ai' }, 0, 'owner').aiProvider, 'near_ai');
+  } finally { store.close(); }
+});
+
+test('revenue sharing validates unique NEAR recipients and a bounded exact percentage', () => {
+  const store = new BusinessPolicyStore(':memory:');
+  try {
+    const sharing = { ...enabled, revenueSharingEnabled: true, revenueShareRecipients: [{ accountId: 'contributor.testnet', label: 'Contributor', basisPoints: 1500 }] };
+    const saved = store.update('company-a', sharing, 0, 'owner');
+    assert.equal(saved.revenueShareRecipients[0].basisPoints, 1500);
+    assert.throws(() => store.update('company-b', { ...sharing, revenueShareRecipients: [{ accountId: 'bad address', label: 'Bad', basisPoints: 10 }] }, 0, 'owner'));
+    assert.throws(() => store.update('company-b', { ...sharing, revenueShareRecipients: [{ accountId: 'a.testnet', label: 'A', basisPoints: 6000 }, { accountId: 'b.testnet', label: 'B', basisPoints: 5000 }] }, 0, 'owner'), /100%/);
+    assert.throws(() => store.update('company-b', { ...sharing, revenueShareRecipients: [] }, 0, 'owner'), /adding a recipient/);
   } finally { store.close(); }
 });
 

@@ -24,6 +24,7 @@ import * as vaultPayments from "@/app/api/agent-payments/route";
 import * as linkItem from "@/app/api/payment-links/[code]/route";
 import * as payoutProvider from "@/app/api/payout-provider/route";
 import { openFiatPayouts } from "./fiat-payouts";
+import { savedBusinessOperationTarget } from "./agent-operation-target";
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
 function requestFor(source: Request, path: string, method: Method, body?: unknown, id?: string) {
@@ -56,6 +57,7 @@ export async function agentWorkspaceContext(source: Request): Promise<Record<str
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export function operationTarget(operation: AgentOperation, context: Record<string, unknown>): unknown {
   const a = operation.arguments;
+  if (operation.tool === "payment.review" || (operation.tool.startsWith("business.") && operation.tool !== "business.create")) return savedBusinessOperationTarget(operation, context.records as {id:string}[] | undefined);
   if (operation.tool.startsWith("payout.")) {
     const fiat = context.payout as { recipients: { id: string }[]; payouts: { id: string }[] };
     if (operation.tool === "payout.prepare") return fiat.recipients.find(item => item.id === a.recipientId);
@@ -63,7 +65,6 @@ export function operationTarget(operation: AgentOperation, context: Record<strin
     if (["payout.submit", "payout.status", "payout.cancel"].includes(operation.tool)) return fiat.payouts.find(item => item.id === a.id);
     return null;
   }
-  if (operation.tool.startsWith("business.") && operation.tool !== "business.create") return (context.records as {id:string}[])?.find(item => item.id === a.id);
   if (operation.tool.startsWith("workspace.")) {
     const rows = context[String(a.resource)];
     if (!Array.isArray(rows)) return rows;

@@ -47,6 +47,16 @@ test("planning respects cumulative daily commitments, reserved cash and recipien
   assert.equal(lowCash.actions[0].disposition, "blocked");
 });
 
+test("policy-generated revenue shares use the same allowlist, liquidity and approval plan as bills", () => {
+  const share = { ...record, id: "share-a", kind: "revenue_share", title: "Contributor share", counterparty: "Contributor", revenueShare: { saleInvoiceId: "invoice-a", basisPoints: 1000, policyRevision: 2 } };
+  const allowed = planBusinessActions(request, { ...context, records: [share] });
+  assert.equal(allowed.actions[0].recordId, share.id);
+  assert.equal(allowed.actions[0].disposition, "review");
+  const blocked = planBusinessActions(request, { ...context, policy: { ...context.policy, allowedRecipients: [] }, records: [share] });
+  assert.equal(blocked.actions[0].disposition, "blocked");
+  assert.match(blocked.actions[0].reasons.join(), /allowlist/);
+});
+
 test("planning excludes terminal and future records and blocks active payments", () => {
   const result = planBusinessActions(request, { ...context, records: [ { ...record, status: "paid" }, { ...record, id: "later", dueDate: "2026-11-01" }, { ...record, id: "active", status: "processing" } ] });
   assert.equal(result.actions.length, 1);

@@ -1,9 +1,11 @@
 import { readNearTreasuryIdentity } from "@/services/server/near-treasury-config";
-import { runSlackNotifications } from "@/services/server/provider-integrations";
 import { timingSafeEqual } from "node:crypto";
 import { requireOperatorSession, requireSameOrigin } from "@/services/server/operator-session";
-import { openFinanceWorker, runFinanceWorker } from "@/services/server/finance-worker";
+import { openFinanceWorker } from "@/services/server/finance-worker";
+import { runFinanceWorker } from "@/services/server/finance-worker";
+import { runSlackNotifications } from "@/services/server/provider-integrations";
 import { openBusinessPolicy } from "@/services/server/business-policy";
+import { runBusinessCycle } from "@/services/server/business-cycle";
 import { runSalesReconciliation } from "@/services/server/sales-worker";
 import { runIntentsReconciliation } from "@/services/server/intents-worker";
 export const runtime = "nodejs";
@@ -28,7 +30,14 @@ export async function POST(request: Request) {
   }
   try {
     const { action, settings } = await request.json(); const company = readNearTreasuryIdentity().companyId;
-    if (action === "tick") { const [sales,intents,finance,notifications]=await Promise.allSettled([Promise.resolve().then(() => runSalesReconciliation(company)),runIntentsReconciliation(company),runFinanceWorker(company),runSlackNotifications(company)]); if(finance.status==="rejected")throw finance.reason; return Response.json({...finance.value,sales:sales.status==="fulfilled"?sales.value:{error:"Sales reconciliation failed; retry on the next cycle"},intents:intents.status==="fulfilled"?intents.value:{error:"Intents reconciliation failed; retry on the next cycle"},notifications:notifications.status==="fulfilled"?notifications.value:{error:"Notification cycle failed; check delivery audit"}}, { headers }); }
+    if (action === "tick") {
+      return Response.json(await runBusinessCycle(company, {
+        intents: runIntentsReconciliation,
+        sales: runSalesReconciliation,
+        finance: runFinanceWorker,
+        notifications: runSlackNotifications,
+      }), { headers });
+    }
     if (action !== "configure" || worker) return Response.json({ error: "Only the company owner can change automation settings" }, { status: 403, headers });
     const store = openFinanceWorker();
     try { return Response.json(store.configure(company, settings, actor), { headers }); } finally { store.close(); }

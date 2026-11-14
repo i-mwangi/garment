@@ -41,6 +41,7 @@ const headings = {
     bill: "Bills",
     payroll: "Payroll",
     reimbursement: "Reimbursements",
+    revenue_share: "Revenue shares",
 };
 export function BusinessWorkspace({ kind, initialCreate = false, recordId, initialEdit = false, }: {
     kind: BusinessRecordKind;
@@ -178,7 +179,7 @@ export function BusinessWorkspace({ kind, initialCreate = false, recordId, initi
             : `Manage payments from your company treasury on ${getNearNetwork().name}.`}
           </p>
         </div>
-        {canManage && (<PrimaryButton text={`Create ${kind === "payroll" ? "payroll payment" : kind}`} disabled={!!records.error} containerClassName="w-fit" onClick={() => {
+        {canManage && kind !== "revenue_share" && (<PrimaryButton text={`Create ${kind === "payroll" ? "payroll payment" : kind}`} disabled={!!records.error} containerClassName="w-fit" onClick={() => {
                 setEditing(null);
                 setShowForm(true);
             }}/>)}
@@ -224,7 +225,7 @@ export function BusinessWorkspace({ kind, initialCreate = false, recordId, initi
                 <p className="mt-2 text-2xl">{stat.value}</p>
               </div>))}
           </div>
-          {showForm && canManage && (<form onSubmit={save} className="grid gap-4 rounded-xl border border-primary-divider p-5 md:grid-cols-2">
+          {showForm && canManage && kind !== "revenue_share" && (<form onSubmit={save} className="grid gap-4 rounded-xl border border-primary-divider p-5 md:grid-cols-2">
               {!!draftRequest.current && !editing && (<p className="md:col-span-2">
                   Retrying this save uses its original details and uploaded
                   receipts. Check the records list before starting another
@@ -373,7 +374,7 @@ export function BusinessWorkspace({ kind, initialCreate = false, recordId, initi
                       </td>
                       <td className="p-3">
                         <div className="flex flex-wrap gap-3">
-                          {canManage && record.status === "draft" && (<>
+                          {canManage && kind !== "revenue_share" && record.status === "draft" && (<>
                               <button disabled={mutation.isPending} onClick={() => {
                         setEditing(record);
                         setShowForm(true);
@@ -397,7 +398,7 @@ export function BusinessWorkspace({ kind, initialCreate = false, recordId, initi
                     record.status === "processing" && (<button disabled={mutation.isPending} onClick={() => action(record, "pay")}>
                                 Check submission
                               </button>)}
-                          {canManage &&
+                          {canManage && kind !== "revenue_share" &&
                     ["draft", "issued"].includes(record.status) && (<button disabled={mutation.isPending} onClick={() => action(record, "cancel")}>
                                 Cancel
                               </button>)}

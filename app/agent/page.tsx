@@ -16,6 +16,7 @@ import AgentAudit from "./AgentAudit";
 import AgentAnswer from "./AgentAnswer";
 import AgentTurnDetails from "./AgentTurnDetails";
 import { followUpSuggestions } from "./follow-up";
+import Link from "next/link";
 
 function FollowUps({ prompts, disabled, onPick }: { prompts: string[]; disabled?: boolean; onPick: (text: string) => void }) {
   if (!prompts.length) return null;
@@ -87,7 +88,7 @@ export default function AgentPage() {
     finally { setBusy(false); }
   };
   return <section className="mx-auto w-full max-w-5xl p-4 md:p-6 space-y-5">
-    <header><h1 className="text-[26px] font-bold leading-tight tracking-tight text-text-primary"><img src="/sidebar/ai-assistant.svg" alt="" className="inline-block w-6 h-6 mr-3"/>Finance agent</h1><p className="mt-1 text-[14px] text-text-secondary">Tell me what you need. We'll review it together.</p></header>
+    <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-[26px] font-bold leading-tight tracking-tight text-text-primary"><img src="/sidebar/ai-assistant.svg" alt="" className="inline-block w-6 h-6 mr-3"/>Finance agent</h1><p className="mt-1 text-[14px] text-text-secondary">Tell me what you need. We'll review it together.</p></div><Link href="/agent/controls" className="rounded-xl border border-primary-divider bg-background px-4 py-2 text-[14px] font-medium text-text-primary">Finance controls</Link></header>
     {canChat && proposals.data?.some(item=>item.turnId.startsWith("mcp:")&&item.status==="pending")&&<section aria-label="External assistant requests" className="rounded-2xl border border-primary-divider bg-background p-4 space-y-3"><h2 className="text-[20px] font-semibold">External assistant requests</h2>{proposals.data.filter(item=>item.turnId.startsWith("mcp:")&&item.status==="pending").map(item=><div key={item.id} className="flex flex-wrap justify-between gap-3 text-[14px]"><span>{item.operation.tool} · {new Date(item.createdAt).toLocaleString()}</span><div className="flex gap-3"><FinanceButton disabled={busy} className="underline" onClick={async()=>{if(item.operation.tool!=="payment.review"){setProposalReview(item);return;}try{await workspaceFetch("/api/agent-actions","POST",{action:"review",id:item.id});await send(`Open payment review for the saved payable record ${String(item.operation.arguments.recordId)}. Do not change its terms.`);}catch(e){setError(e instanceof Error?e.message:"Review unavailable");}}}>Review</FinanceButton><FinanceButton disabled={busy} className="underline" onClick={async()=>{try{await workspaceFetch("/api/agent-actions","POST",{action:"cancel",id:item.id});await proposals.refetch();}catch(e){setError(e instanceof Error?e.message:"Dismissal failed");}}}>Dismiss</FinanceButton></div></div>)}</section>}
     {!enabled ? <p role="status" className="rounded-2xl border border-primary-divider p-5">Select the company treasury workspace to chat.</p> : <div className="rounded-2xl border border-primary-divider bg-background overflow-hidden">
       <div className="border-b border-primary-divider px-5 py-3 text-[12px] text-text-secondary">{getNearNetwork().name} - Payments need your authorization</div>
@@ -112,7 +113,7 @@ export default function AgentPage() {
       </form>
     </div>}
     {canChat && <AgentAudit turns={history.data || []} proposals={proposals.data || []}/>}
-    <a href="/setting" className="text-[14px] text-text-secondary underline">Wallet, automation and connected tools in Settings</a>
+    <Link href="/agent/controls" className="text-[14px] text-text-secondary underline">Open wallet, policy and automation controls</Link>
     {proposalReview && (proposalReview.operation.tool === "vault.authorize" ? <WalletReview key={proposalReview.id} proposal={proposalReview} onClose={() => setProposalReview(null)} onUpdated={() => void proposals.refetch()} /> : <ActionReview key={proposalReview.id} proposal={proposalReview} onClose={() => setProposalReview(null)} onUpdated={() => void proposals.refetch()} />)}
     {review && <PaymentReview key={review.action.recordId} {...review} onClose={() => setReview(null)} />}
   </section>;
