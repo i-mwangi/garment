@@ -21,5 +21,13 @@ export function useRefreshTreasuryProposal() {
 }
 export function useCancelTreasuryProposal() {
   const wallet=useNearWallet();
-  return useRecordMutation(async (input: { proposalUuid: string }) => {try{return await workspaceFetch(`/api/business-records/${encodeURIComponent(input.proposalUuid)}`,"PATCH",{action:"cancel"});}catch{return authorizeNativeTreasuryPayment(input.proposalUuid,wallet,"cancel");}});
+  return useRecordMutation(async (input: { proposalUuid: string }) => {
+    try {
+      return await workspaceFetch(`/api/business-records/${encodeURIComponent(input.proposalUuid)}`, "PATCH", { action: "cancelPayment" });
+    } catch {
+      // A payment that has reached the native contract must still be cancelled
+      // with the configured vault owner; queue-pending requests never reach it.
+      return authorizeNativeTreasuryPayment(input.proposalUuid, wallet, "cancel");
+    }
+  });
 }

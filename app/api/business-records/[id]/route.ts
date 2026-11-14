@@ -36,6 +36,22 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (body.action === "cancel") {
       return Response.json(repository.cancel(config.companyId, id));
     }
+    if (body.action === "cancelPayment") {
+      const journal = openVaultPayments();
+      try {
+        const payment = journal.get(config.companyId, id);
+        if (!payment) throw new Error("Native treasury payment not found");
+        if (!["queue_pending", "queue_failed_review_required"].includes(payment.status)) {
+          throw new Error("Only an unsubmitted queue-pending payment can be cancelled here");
+        }
+        const next = journal.patch(payment, { status: "cancelled" }, "Owner cancelled unsubmitted queue request");
+        const current = repository.get(config.companyId, id);
+        if (current && ["awaiting_approval", "processing", "submitted", "ready"].includes(current.status)) {
+          repository.transition(config.companyId, id, "cancelled", [current.status]);
+        }
+        return Response.json({ payment: next, record: repository.get(config.companyId, id) });
+      } finally { journal.close(); }
+    }
     if (record.kind === "invoice") {
       if (body.action === "issue") {
         if (record.status === "issued" || record.status === "paid") return Response.json(record);
