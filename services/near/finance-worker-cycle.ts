@@ -1,5 +1,5 @@
 import type { FinanceAutomation } from "../server/finance-worker-store.ts";
-export interface WorkerPayment { recordId: string; status: string }
+export interface WorkerPayment { recordId: string; status: string; runId?: string }
 export interface FinanceCycleTools {
   active(): boolean;
   canSubmit(): boolean;
@@ -17,6 +17,11 @@ export async function financeWorkerCycle(config: FinanceAutomation, tools: Finan
     if (!tools.active()) break;
     if (["paid", "cancelled", "expired", "policy_changed"].includes(saved.status) || saved.status.endsWith("review_required")) continue;
     try {
+      if (saved.status === "queue_pending" && saved.runId && tools.canSubmit()) {
+        submitted++;
+        await tools.queue(saved.runId, saved.recordId);
+        tools.audit(`Retried queue submission for ${saved.recordId}`);
+      }
       const payment = await tools.reconcile(saved.recordId);
       tools.audit(`Reconciled ${saved.recordId}: ${payment.status}`);
       if (payment.status === "ready" && submitted < config.maxActions && tools.active() && tools.canSubmit()) {
