@@ -63,7 +63,7 @@ export async function POST(request:Request) {
   }
   if(signer!==binding.ownerId)throw new Error("Sign in with the current native vault owner before changing permissions");
   vaultAdministrationCall(binding,body.action,body.address);
-  const proposal=store.prepare(company,principal.id,`near-human:${body.requestId}`,{tool:"vault.authorize",arguments:{action:body.action,...(body.address?{address:body.address}:{})}});
+  const proposal=store.prepare(company,principal.id,`near-human:${body.requestId}`,{tool:"vault.authorize",arguments:{action:body.action,...(body.action!=="configure_executor"&&body.address?{address:body.address}:{})}});
   return Response.json({proposal},{headers});
  }catch(error){return Response.json({error:error instanceof Error?error.message:"Native wallet action could not be prepared"},{status:409,headers});}
  finally{store.close();}
